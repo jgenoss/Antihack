@@ -1,0 +1,12 @@
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\bin\x86\Central\Launcher.exe.config
+C:\Antihack\Launcher\bin\x86\Central\Launcher.exe.config
+C:\Antihack\Launcher\bin\x86\Central\Launcher.exe
+C:\Antihack\Launcher\bin\x86\Central\DotNetZip.dll
+C:\Antihack\Launcher\obj\x86\Central\Launcher.Conector.resources
+C:\Antihack\Launcher\obj\x86\Central\Launcher.Launcher.resources
+C:\Antihack\Launcher\obj\x86\Central\LauncherRaiderZ.Properties.Resources.resources
+C:\Antihack\Launcher\obj\x86\Central\Launcher.csproj.GenerateResource.cache
+C:\Antihack\Launcher\obj\x86\Central\Launcher.csproj.CoreCompileInputs.cache
+C:\Antihack\Launcher\obj\x86\Central\Launcher.csproj.CopyComplete
+C:\Antihack\Launcher\obj\x86\Central\Launcher.exe
+C:\Antihack\Launcher\obj\x86\Central\Launcher.csprojAssemblyReference.cache

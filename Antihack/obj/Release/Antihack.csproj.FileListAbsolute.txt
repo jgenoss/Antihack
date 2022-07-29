@@ -1,0 +1,16 @@
+C:\Antihack\bin\Release\MiniFighter Latino.exe.config
+C:\Antihack\bin\Release\MiniFighter Latino.exe
+C:\Antihack\bin\Release\MiniFighter Latino.pdb
+C:\Antihack\bin\Release\Antihack\Antihack.exe.config
+C:\Antihack\bin\Release\Antihack\Antihack.exe
+C:\Antihack\bin\Release\Antihack\Antihack.pdb
+C:\Antihack\bin\Release\HackShield\Antihack.exe.config
+C:\Antihack\bin\Release\HackShield\Antihack.exe
+C:\Antihack\bin\Release\HackShield\Antihack.pdb
+C:\Antihack\Antihack\obj\Release\Antihack.AntihackForm.resources
+C:\Antihack\Antihack\obj\Release\Antihack.Properties.Resources.resources
+C:\Antihack\Antihack\obj\Release\Antihack.csproj.GenerateResource.cache
+C:\Antihack\Antihack\obj\Release\Antihack.csproj.CoreCompileInputs.cache
+C:\Antihack\Antihack\obj\Release\Antihack.csproj.CopyComplete
+C:\Antihack\Antihack\obj\Release\Antihack.exe
+C:\Antihack\Antihack\obj\Release\Antihack.pdb

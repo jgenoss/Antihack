@@ -1,0 +1,9 @@
+[LAUNCHER_CONFIG]
+URL_LAUNCHER = http://localhost/launcher/Launcher.json
+URL_DIR_UPDATE = http://localhost/launcher/updates
+KEY = Xw8123idsas
+URL_FACEBOOK = https://www.facebook.com/MuExtasis-110883484034737/
+URL_REGISTRO = https://muextasis.com/index.php?page_id=register
+URL_SOPORTE = https://www.facebook.com/messages/t/azpirin4
+URL_BANNER = https://www.minifighterlatino.com/launcher/web/Banner.html
+VERSION = 1

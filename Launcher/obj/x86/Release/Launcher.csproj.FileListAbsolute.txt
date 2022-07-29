@@ -1,0 +1,37 @@
+C:\Users\Jose\Visual Projects\LauncherJg\WindowsFormsApplication1\bin\Release\Launcher.exe.config
+C:\Users\Jose\Visual Projects\LauncherJg\WindowsFormsApplication1\bin\Release\Launcher.exe
+C:\Users\Jose\Visual Projects\LauncherJg\WindowsFormsApplication1\bin\Release\Launcher.pdb
+C:\Users\Jose\Visual Projects\LauncherJg\WindowsFormsApplication1\bin\Release\DotNetZip.dll
+C:\Users\Jose\Visual Projects\LauncherJg\WindowsFormsApplication1\obj\x86\Release\LauncherMu.Conector.resources
+C:\Users\Jose\Visual Projects\LauncherJg\WindowsFormsApplication1\obj\x86\Release\LauncherMu.Launcher.resources
+C:\Users\Jose\Visual Projects\LauncherJg\WindowsFormsApplication1\obj\x86\Release\LauncherMu.Properties.Resources.resources
+C:\Users\Jose\Visual Projects\LauncherJg\WindowsFormsApplication1\obj\x86\Release\LauncherMu.Settings.resources
+C:\Users\Jose\Visual Projects\LauncherJg\WindowsFormsApplication1\obj\x86\Release\Launcher.csproj.GenerateResource.Cache
+C:\Users\Jose\Visual Projects\LauncherJg\WindowsFormsApplication1\obj\x86\Release\Launcher.exe
+C:\Users\Jose\Visual Projects\LauncherJg\WindowsFormsApplication1\obj\x86\Release\Launcher.pdb
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\bin\Release\Launcher.exe.config
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release\Launcher.exe
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release\Launcher.pdb
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\bin\Release\Launcher.exe
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\bin\Release\Launcher.pdb
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\bin\Release\DotNetZip.dll
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release\LauncherMu.Conector.resources
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release\LauncherMu.Launcher.resources
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release\LauncherMu.Properties.Resources.resources
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release\LauncherMu.Settings.resources
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release\Launcher.csproj.GenerateResource.Cache
+C:\Antihack\Launcher\bin\Release\Launcher.exe.config
+C:\Antihack\Launcher\bin\Release\Launcher.exe
+C:\Antihack\Launcher\bin\Release\Launcher.pdb
+C:\Antihack\Launcher\bin\Release\DotNetZip.dll
+C:\Antihack\Launcher\obj\x86\Release\Launcher.Conector.resources
+C:\Antihack\Launcher\obj\x86\Release\Launcher.Launcher.resources
+C:\Antihack\Launcher\obj\x86\Release\Launcher.Properties.Resources.resources
+C:\Antihack\Launcher\obj\x86\Release\Launcher.csproj.GenerateResource.cache
+C:\Antihack\Launcher\obj\x86\Release\Launcher.csproj.CoreCompileInputs.cache
+C:\Antihack\Launcher\obj\x86\Release\Launcher.csproj.CopyComplete
+C:\Antihack\Launcher\obj\x86\Release\Launcher.exe
+C:\Antihack\Launcher\obj\x86\Release\Launcher.pdb
+C:\Antihack\Launcher\bin\Release\Newtonsoft.Json.dll
+C:\Antihack\Launcher\bin\Release\Newtonsoft.Json.xml
+C:\Antihack\Launcher\obj\x86\Release\Launcher.csprojAssemblyReference.cache

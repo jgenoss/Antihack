@@ -1,0 +1,9 @@
+C:\Antihack\client\bin\Debug\Client.exe.config
+C:\Antihack\client\bin\Debug\Client.exe
+C:\Antihack\client\bin\Debug\Client.pdb
+C:\Antihack\client\obj\Debug\Client.Form1.resources
+C:\Antihack\client\obj\Debug\client.Properties.Resources.resources
+C:\Antihack\client\obj\Debug\client.csproj.GenerateResource.cache
+C:\Antihack\client\obj\Debug\client.csproj.CoreCompileInputs.cache
+C:\Antihack\client\obj\Debug\Client.exe
+C:\Antihack\client\obj\Debug\Client.pdb

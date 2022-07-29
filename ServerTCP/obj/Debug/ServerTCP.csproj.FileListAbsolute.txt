@@ -1,0 +1,12 @@
+D:\Archivos\Desktop\Games\SuperSimpleTCP\ServerTCP\bin\Debug\ServerTCP.exe.config
+D:\Archivos\Desktop\Games\SuperSimpleTCP\ServerTCP\bin\Debug\ServerTCP.exe
+D:\Archivos\Desktop\Games\SuperSimpleTCP\ServerTCP\bin\Debug\ServerTCP.pdb
+D:\Archivos\Desktop\Games\SuperSimpleTCP\ServerTCP\bin\Debug\SimpleTcp.dll
+D:\Archivos\Desktop\Games\SuperSimpleTCP\ServerTCP\bin\Debug\SimpleTcp.xml
+D:\Archivos\Desktop\Games\SuperSimpleTCP\ServerTCP\obj\Debug\ServerTCP.Properties.Resources.resources
+D:\Archivos\Desktop\Games\SuperSimpleTCP\ServerTCP\obj\Debug\ServerTCP.Form1.resources
+D:\Archivos\Desktop\Games\SuperSimpleTCP\ServerTCP\obj\Debug\ServerTCP.csproj.GenerateResource.cache
+D:\Archivos\Desktop\Games\SuperSimpleTCP\ServerTCP\obj\Debug\ServerTCP.csproj.CoreCompileInputs.cache
+D:\Archivos\Desktop\Games\SuperSimpleTCP\ServerTCP\obj\Debug\ServerTCP.csproj.CopyComplete
+D:\Archivos\Desktop\Games\SuperSimpleTCP\ServerTCP\obj\Debug\ServerTCP.exe
+D:\Archivos\Desktop\Games\SuperSimpleTCP\ServerTCP\obj\Debug\ServerTCP.pdb

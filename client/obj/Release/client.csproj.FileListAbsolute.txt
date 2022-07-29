@@ -1,0 +1,12 @@
+C:\Antihack\client\bin\Release\client.exe.config
+C:\Antihack\client\bin\Release\client.exe
+C:\Antihack\client\bin\Release\client.pdb
+C:\Antihack\bin\Release\Client.exe.config
+C:\Antihack\bin\Release\Client.exe
+C:\Antihack\bin\Release\Client.pdb
+C:\Antihack\client\obj\Release\Client.Form1.resources
+C:\Antihack\client\obj\Release\Client.Properties.Resources.resources
+C:\Antihack\client\obj\Release\Client.csproj.GenerateResource.cache
+C:\Antihack\client\obj\Release\Client.csproj.CoreCompileInputs.cache
+C:\Antihack\client\obj\Release\Client.exe
+C:\Antihack\client\obj\Release\Client.pdb

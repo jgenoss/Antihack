@@ -1,0 +1,63 @@
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\bin\Release\Launcher.exe.config
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\bin\Release\Launcher.exe
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\bin\Release\Launcher.pdb
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\bin\Release\DotNetZip.dll
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\bin\Release\JGSC.dll
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\bin\Release\JGSC.pdb
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release Launcher\Launcher.csprojResolveAssemblyReference.cache
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release Launcher\LauncherMu.Conector.resources
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release Launcher\LauncherMu.Launcher.resources
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release Launcher\LauncherMu.Properties.Resources.resources
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release Launcher\LauncherMu.Settings.resources
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release Launcher\Launcher.csproj.GenerateResource.Cache
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release Launcher\Launcher.exe
+C:\Users\Jose\Visual Projects\LauncherJg\Launcher\obj\x86\Release Launcher\Launcher.pdb
+D:\cositas\Launcher\LauncherJg\Launcher\bin\Release\Launcher.exe.config
+D:\cositas\Launcher\LauncherJg\Launcher\obj\x86\Release Launcher\Launcher.exe
+D:\cositas\Launcher\LauncherJg\Launcher\obj\x86\Release Launcher\Launcher.pdb
+D:\cositas\Source\LauncherJg\Launcher\bin\Release\Launcher.exe.config
+D:\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\Launcher.exe
+D:\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\Launcher.pdb
+D:\cositas\Source\LauncherJg\Launcher\bin\Release\Launcher.exe
+D:\cositas\Source\LauncherJg\Launcher\bin\Release\Launcher.pdb
+D:\cositas\Source\LauncherJg\Launcher\bin\Release\DotNetZip.dll
+D:\cositas\Source\LauncherJg\Launcher\bin\Release\JGSC.dll
+D:\cositas\Source\LauncherJg\Launcher\bin\Release\JGSC.pdb
+D:\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\Launcher.csprojResolveAssemblyReference.cache
+D:\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\LauncherMu.Conector.resources
+D:\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\LauncherMu.Launcher.resources
+D:\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\LauncherMu.Properties.Resources.resources
+D:\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\LauncherMu.Settings.resources
+D:\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\Launcher.csproj.GenerateResource.Cache
+D:\cosas\cositas\Source\LauncherJg\Launcher\bin\Release\Launcher.exe.config
+D:\cosas\cositas\Source\LauncherJg\Launcher\bin\Release\Launcher.exe
+D:\cosas\cositas\Source\LauncherJg\Launcher\bin\Release\Launcher.pdb
+D:\cosas\cositas\Source\LauncherJg\Launcher\bin\Release\DotNetZip.dll
+D:\cosas\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\Launcher.csprojResolveAssemblyReference.cache
+D:\cosas\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\LauncherMu.Conector.resources
+D:\cosas\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\LauncherMu.Launcher.resources
+D:\cosas\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\LauncherMu.Properties.Resources.resources
+D:\cosas\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\Launcher.csproj.GenerateResource.Cache
+D:\cosas\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\Launcher.exe
+D:\cosas\cositas\Source\LauncherJg\Launcher\obj\x86\Release Launcher\Launcher.pdb
+E:\Archivos de juegos\Source\LauncherPBJG\Launcher\bin\Release\Launcher.exe.config
+E:\Archivos de juegos\Source\LauncherPBJG\Launcher\obj\x86\Release Launcher\Launcher.exe
+E:\Archivos de juegos\Source\LauncherPBJG\Launcher\obj\x86\Release Launcher\Launcher.pdb
+E:\Archivos de juegos\Source\LauncherPBJG\Launcher\bin\Release\Launcher.exe
+E:\Archivos de juegos\Source\LauncherPBJG\Launcher\bin\Release\Launcher.pdb
+E:\Archivos de juegos\Source\LauncherPBJG\Launcher\bin\Release\DotNetZip.dll
+E:\Archivos de juegos\Source\LauncherPBJG\Launcher\obj\x86\Release Launcher\LauncherMu.Conector.resources
+E:\Archivos de juegos\Source\LauncherPBJG\Launcher\obj\x86\Release Launcher\LauncherMu.Launcher.resources
+E:\Archivos de juegos\Source\LauncherPBJG\Launcher\obj\x86\Release Launcher\LauncherMu.Properties.Resources.resources
+E:\Archivos de juegos\Source\LauncherPBJG\Launcher\obj\x86\Release Launcher\Launcher.csproj.GenerateResource.Cache
+E:\Archivos de juegos\Source\LauncherRaiderZ\Launcher\bin\Release\Launcher.exe.config
+E:\Archivos de juegos\Source\LauncherRaiderZ\Launcher\obj\x86\Release Launcher\Launcher.exe
+E:\Archivos de juegos\Source\LauncherRaiderZ\Launcher\obj\x86\Release Launcher\Launcher.pdb
+E:\Archivos de juegos\Source\LauncherRaiderZ\Launcher\bin\Release\Launcher.exe
+E:\Archivos de juegos\Source\LauncherRaiderZ\Launcher\bin\Release\Launcher.pdb
+E:\Archivos de juegos\Source\LauncherRaiderZ\Launcher\bin\Release\DotNetZip.dll
+E:\Archivos de juegos\Source\LauncherRaiderZ\Launcher\obj\x86\Release Launcher\Launcher.csproj.GenerateResource.Cache
+E:\Archivos de juegos\Source\LauncherRaiderZ\Launcher\obj\x86\Release Launcher\LauncherRaiderZ.Properties.Resources.resources
+E:\Archivos de juegos\Source\LauncherRaiderZ\Launcher\obj\x86\Release Launcher\LauncherRaiderZ.Conector.resources
+E:\Archivos de juegos\Source\LauncherRaiderZ\Launcher\obj\x86\Release Launcher\LauncherRaiderZ.Launcher.resources
+E:\Archivos de juegos\Source\LauncherRaiderZ\Launcher\obj\x86\Release Launcher\Launcher.csprojResolveAssemblyReference.cache

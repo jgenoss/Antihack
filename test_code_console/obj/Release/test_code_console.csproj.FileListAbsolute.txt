@@ -1,0 +1,9 @@
+C:\Antihack\test_code_console\bin\Release\test_code_console.exe.config
+C:\Antihack\test_code_console\bin\Release\test_code_console.exe
+C:\Antihack\test_code_console\bin\Release\test_code_console.pdb
+C:\Antihack\test_code_console\obj\Release\test_code_console.csproj.CoreCompileInputs.cache
+C:\Antihack\test_code_console\obj\Release\test_code_console.exe
+C:\Antihack\test_code_console\obj\Release\test_code_console.pdb
+C:\Antihack\test_code_console\bin\Release\Newtonsoft.Json.dll
+C:\Antihack\test_code_console\bin\Release\Newtonsoft.Json.xml
+C:\Antihack\test_code_console\obj\Release\test_code_console.csproj.CopyComplete

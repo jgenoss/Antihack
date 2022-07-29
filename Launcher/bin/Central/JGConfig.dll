@@ -1,0 +1,9 @@
+[LAUNCHER_CONFIG]
+URL_LAUNCHER_PHP = http://localhost/launcher/Launcher.php
+URL_DIR_UPDATE = http://localhost/launcher
+KEY = Xw8123idsas
+URL_FACEBOOK = https://www.facebook.com/MuExtasis-110883484034737/
+URL_REGISTRO = https://muextasis.com/index.php?page_id=register
+URL_SOPORTE = https://www.facebook.com/messages/t/azpirin4
+URL_DONACION = https://www.facebook.com/messages/t/azpirin4
+URL_BANNER = http://localhost/launcher/web/Banner.html

@@ -1,0 +1,9 @@
+d:\archivos\documents\visual studio 2013\Projects\Encode_Decode\Encode_Decode\bin\Debug\Encode_Decode.exe.config
+d:\archivos\documents\visual studio 2013\Projects\Encode_Decode\Encode_Decode\bin\Debug\Encode_Decode.exe
+d:\archivos\documents\visual studio 2013\Projects\Encode_Decode\Encode_Decode\bin\Debug\Encode_Decode.pdb
+d:\archivos\documents\visual studio 2013\Projects\Encode_Decode\Encode_Decode\obj\Debug\Encode_Decode.csprojResolveAssemblyReference.cache
+d:\archivos\documents\visual studio 2013\Projects\Encode_Decode\Encode_Decode\obj\Debug\Encode_Decode.Form1.resources
+d:\archivos\documents\visual studio 2013\Projects\Encode_Decode\Encode_Decode\obj\Debug\Encode_Decode.Properties.Resources.resources
+d:\archivos\documents\visual studio 2013\Projects\Encode_Decode\Encode_Decode\obj\Debug\Encode_Decode.csproj.GenerateResource.Cache
+d:\archivos\documents\visual studio 2013\Projects\Encode_Decode\Encode_Decode\obj\Debug\Encode_Decode.exe
+d:\archivos\documents\visual studio 2013\Projects\Encode_Decode\Encode_Decode\obj\Debug\Encode_Decode.pdb
