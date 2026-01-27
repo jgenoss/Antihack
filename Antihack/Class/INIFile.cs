@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace Antihack
+namespace AntiCheat
 {
     public class INIFile
     {

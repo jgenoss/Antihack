@@ -40,12 +40,15 @@
             this.statusStrip1 = new System.Windows.Forms.StatusStrip();
             this.toolStripStatusLabel1 = new System.Windows.Forms.ToolStripStatusLabel();
             this.toolStripStatusLabel2 = new System.Windows.Forms.ToolStripStatusLabel();
+            this.searchBox = new System.Windows.Forms.TextBox();
+            this.label2 = new System.Windows.Forms.Label();
+            this.textBox_playes_report = new System.Windows.Forms.TextBox();
             this.statusStrip1.SuspendLayout();
             this.SuspendLayout();
             // 
             // btnStart
             // 
-            this.btnStart.Location = new System.Drawing.Point(756, 558);
+            this.btnStart.Location = new System.Drawing.Point(413, 7);
             this.btnStart.Name = "btnStart";
             this.btnStart.Size = new System.Drawing.Size(89, 23);
             this.btnStart.TabIndex = 13;
@@ -55,32 +58,31 @@
             // 
             // btnSend
             // 
-            this.btnSend.Location = new System.Drawing.Point(679, 558);
+            this.btnSend.Location = new System.Drawing.Point(973, 573);
             this.btnSend.Name = "btnSend";
-            this.btnSend.Size = new System.Drawing.Size(71, 23);
+            this.btnSend.Size = new System.Drawing.Size(181, 23);
             this.btnSend.TabIndex = 12;
-            this.btnSend.Text = "Send";
+            this.btnSend.Text = "Send Command";
             this.btnSend.UseVisualStyleBackColor = true;
             this.btnSend.Click += new System.EventHandler(this.btnSend_Click);
             // 
             // inputInfo
             // 
-            this.inputInfo.BackColor = System.Drawing.SystemColors.ActiveCaptionText;
-            this.inputInfo.BorderStyle = System.Windows.Forms.BorderStyle.None;
-            this.inputInfo.Font = new System.Drawing.Font("Consolas", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.inputInfo.ForeColor = System.Drawing.Color.White;
-            this.inputInfo.Location = new System.Drawing.Point(12, 35);
+            this.inputInfo.BackColor = System.Drawing.SystemColors.Control;
+            this.inputInfo.Font = new System.Drawing.Font("Consolas", 8F);
+            this.inputInfo.ForeColor = System.Drawing.Color.Black;
+            this.inputInfo.HideSelection = false;
+            this.inputInfo.Location = new System.Drawing.Point(12, 36);
             this.inputInfo.Multiline = true;
             this.inputInfo.Name = "inputInfo";
-            this.inputInfo.ReadOnly = true;
-            this.inputInfo.ScrollBars = System.Windows.Forms.ScrollBars.Both;
-            this.inputInfo.Size = new System.Drawing.Size(661, 546);
+            this.inputInfo.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            this.inputInfo.Size = new System.Drawing.Size(955, 288);
             this.inputInfo.TabIndex = 10;
             // 
             // label3
             // 
             this.label3.AutoSize = true;
-            this.label3.Location = new System.Drawing.Point(676, 16);
+            this.label3.Location = new System.Drawing.Point(1043, 17);
             this.label3.Name = "label3";
             this.label3.Size = new System.Drawing.Size(49, 13);
             this.label3.TabIndex = 14;
@@ -88,11 +90,14 @@
             // 
             // lstClientIP
             // 
-            this.lstClientIP.BorderStyle = System.Windows.Forms.BorderStyle.None;
+            this.lstClientIP.BackColor = System.Drawing.SystemColors.Control;
+            this.lstClientIP.BorderStyle = System.Windows.Forms.BorderStyle.FixedSingle;
+            this.lstClientIP.Font = new System.Drawing.Font("Consolas", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.lstClientIP.FormattingEnabled = true;
-            this.lstClientIP.Location = new System.Drawing.Point(679, 43);
+            this.lstClientIP.Location = new System.Drawing.Point(973, 59);
             this.lstClientIP.Name = "lstClientIP";
-            this.lstClientIP.Size = new System.Drawing.Size(166, 481);
+            this.lstClientIP.ScrollAlwaysVisible = true;
+            this.lstClientIP.Size = new System.Drawing.Size(181, 483);
             this.lstClientIP.TabIndex = 15;
             // 
             // inputSelect
@@ -101,10 +106,11 @@
             this.inputSelect.Items.AddRange(new object[] {
             "Seleccione una opcion",
             "Apagar pc del jugador",
-            "Desconectar jugador"});
-            this.inputSelect.Location = new System.Drawing.Point(679, 531);
+            "Desconectar jugador",
+            "Stream Viewer"});
+            this.inputSelect.Location = new System.Drawing.Point(973, 546);
             this.inputSelect.Name = "inputSelect";
-            this.inputSelect.Size = new System.Drawing.Size(166, 21);
+            this.inputSelect.Size = new System.Drawing.Size(181, 21);
             this.inputSelect.TabIndex = 16;
             // 
             // label1
@@ -129,9 +135,9 @@
             this.statusStrip1.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
             this.toolStripStatusLabel1,
             this.toolStripStatusLabel2});
-            this.statusStrip1.Location = new System.Drawing.Point(0, 592);
+            this.statusStrip1.Location = new System.Drawing.Point(0, 605);
             this.statusStrip1.Name = "statusStrip1";
-            this.statusStrip1.Size = new System.Drawing.Size(852, 22);
+            this.statusStrip1.Size = new System.Drawing.Size(1162, 22);
             this.statusStrip1.TabIndex = 17;
             this.statusStrip1.Text = "Datos Enviados :";
             // 
@@ -147,11 +153,41 @@
             this.toolStripStatusLabel2.Size = new System.Drawing.Size(89, 17);
             this.toolStripStatusLabel2.Text = "Datos resividos:";
             // 
+            // searchBox
+            // 
+            this.searchBox.Location = new System.Drawing.Point(973, 35);
+            this.searchBox.Name = "searchBox";
+            this.searchBox.Size = new System.Drawing.Size(181, 20);
+            this.searchBox.TabIndex = 18;
+            this.searchBox.TextChanged += new System.EventHandler(this.searchBox_TextChanged);
+            // 
+            // label2
+            // 
+            this.label2.AutoSize = true;
+            this.label2.Location = new System.Drawing.Point(12, 327);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(191, 13);
+            this.label2.TabIndex = 20;
+            this.label2.Text = "Player ALL or Report Dll or INJECTION";
+            // 
+            // textBox_playes_report
+            // 
+            this.textBox_playes_report.Location = new System.Drawing.Point(12, 343);
+            this.textBox_playes_report.Multiline = true;
+            this.textBox_playes_report.Name = "textBox_playes_report";
+            this.textBox_playes_report.ReadOnly = true;
+            this.textBox_playes_report.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
+            this.textBox_playes_report.Size = new System.Drawing.Size(955, 253);
+            this.textBox_playes_report.TabIndex = 21;
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(852, 614);
+            this.ClientSize = new System.Drawing.Size(1162, 627);
+            this.Controls.Add(this.textBox_playes_report);
+            this.Controls.Add(this.label2);
+            this.Controls.Add(this.searchBox);
             this.Controls.Add(this.statusStrip1);
             this.Controls.Add(this.inputSelect);
             this.Controls.Add(this.lstClientIP);
@@ -161,9 +197,11 @@
             this.Controls.Add(this.inputInfo);
             this.Controls.Add(this.inputServerIp);
             this.Controls.Add(this.label1);
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedSingle;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.MaximizeBox = false;
             this.Name = "Form1";
-            this.Text = "TCP/IP Server";
+            this.Text = "Server AntiCheats";
             this.Load += new System.EventHandler(this.Server_Load);
             this.statusStrip1.ResumeLayout(false);
             this.statusStrip1.PerformLayout();
@@ -185,6 +223,9 @@
         private System.Windows.Forms.StatusStrip statusStrip1;
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel1;
         private System.Windows.Forms.ToolStripStatusLabel toolStripStatusLabel2;
+        private System.Windows.Forms.TextBox searchBox;
+        private System.Windows.Forms.Label label2;
+        private System.Windows.Forms.TextBox textBox_playes_report;
     }
 }
 

@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Diagnostics;
 
-namespace Antihack
+namespace AntiCheat
 {
     static class Program
     {
@@ -13,11 +13,11 @@ namespace Antihack
         /// Punto de entrada principal para la aplicación.
         /// </summary>
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new AntihackForm());
+            Application.Run(new AntiCheatForm(args));
         }
     }
 }

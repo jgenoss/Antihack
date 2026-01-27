@@ -26,7 +26,7 @@ namespace ext_encrypt_decrypt
         }
         public string decrypt(string code)
         {
-            byte[] data = Convert.FromBase64String(code);
+            byte[] data = Convert.FromBase64String(code); // decrypt the incrypted text
             using (MD5CryptoServiceProvider md5 = new MD5CryptoServiceProvider())
             {
                 byte[] keys = md5.ComputeHash(UTF8Encoding.UTF8.GetBytes(codigo));
@@ -38,5 +38,7 @@ namespace ext_encrypt_decrypt
                 }
             }
         }
+
+
     }
 }

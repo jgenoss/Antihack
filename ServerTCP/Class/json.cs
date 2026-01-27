@@ -10,22 +10,22 @@ namespace json_ext
 {
     class ClassJson
     {
-        public string option { get; set; }
+        public string message { get; set; }
         public string key { get; set; }
         public string IP { get; set; }
         
-        public string Serialize(string key, string option)
+        public string Serialize(string key, string message)
         {
             ClassJson jsonData = new ClassJson()
             {
                 key = $"{key}",
-                option = $"{option}"
+                message = $"{message}"
             };
             return JsonConvert.SerializeObject(jsonData, Formatting.Indented);
         }
-        public ClassJson Deserialize(string option)
+        public ClassJson Deserialize(string message)
         {
-            return JsonConvert.DeserializeObject<ClassJson>(option);
+            return JsonConvert.DeserializeObject<ClassJson>(message);
         }
         public ClassJson Blacklist()
         {
