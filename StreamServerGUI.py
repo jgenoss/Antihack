@@ -2,6 +2,7 @@ import configparser
 import os
 import socket
 import threading
+import sys
 import cv2
 import numpy as np
 import customtkinter as ctk
@@ -10,78 +11,131 @@ from datetime import datetime
 
 class ScreenShareServerGUI:
     def __init__(self):
-        # Configuración de customtkinter
+        # Configuracion de customtkinter
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
-        
+
         # Ventana principal
         self.root = ctk.CTk()
-        self.root.title("🖥️ Screen Share Server - IPv4/IPv6")
+        self.root.title("Screen Share Server - IPv4 + IPv6")
         self.root.geometry("1000x700")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        
+
         # Variables del servidor
         self.config_file = "config.ini"
-        self.host, self.port = self.load_config()
+        self.ipv4_host, self.ipv6_host, self.port, self.network_config = self.load_config()
         self.running = False
-        self.sock = None
+
+        # Sockets duales - servidor escucha en AMBOS simultaneamente
+        self.sock_ipv4 = None
+        self.sock_ipv6 = None
+
         self.clients = {}
         self.current_viewing_window = None
         self.current_viewing_client = None
-        self.address_family = None
-        
+
         # Crear UI PRIMERO
         self.create_ui()
-        
-        # Ahora sí detectar familia de direcciones (después de crear UI)
-        self.address_family = self.detect_address_family(self.host)
-        
-    def detect_address_family(self, host):
-        """Detecta si el host es IPv4, IPv6 o debe usar dual-stack."""
-        try:
-            addr_info = socket.getaddrinfo(host, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-            
-            if addr_info:
-                family = addr_info[0][0]
-                
-                if host in ['0.0.0.0', '']:
-                    self.log_message("🌐 Modo dual-stack (IPv4 e IPv6)", "info")
-                    return socket.AF_INET6
-                
-                if family == socket.AF_INET6:
-                    self.log_message(f"✅ IPv6 detectado: {host}", "info")
-                    return socket.AF_INET6
-                else:
-                    self.log_message(f"✅ IPv4 detectado: {host}", "info")
-                    return socket.AF_INET
-                    
-        except socket.gaierror as e:
-            self.log_message(f"⚠️ Error resolviendo host: {e}", "warning")
-        
-        return socket.AF_INET
 
-    def get_bind_address(self):
-        """Obtiene la dirección apropiada para bind() según la familia de direcciones."""
-        if self.address_family == socket.AF_INET6:
-            if self.host in ['0.0.0.0', '']:
-                return '::'
-            return self.host
+        # Mostrar configuracion detectada
+        self._show_config_info()
+
+    def _show_config_info(self):
+        """Muestra informacion de la configuracion detectada."""
+        self.log_message("Modo servidor: Listeners duales (IPv4 + IPv6)", "info")
+
+        if self.ipv4_host:
+            self.log_message(f"  IPv4: {self.ipv4_host}:{self.port}", "info")
         else:
-            return self.host
+            self.log_message("  IPv4: Deshabilitado", "warning")
+
+        if self.ipv6_host:
+            ipv6_supported = "OK" if self._supports_ipv6() else "NO SOPORTADO"
+            self.log_message(f"  IPv6: [{self.ipv6_host}]:{self.port} ({ipv6_supported})", "info")
+        else:
+            self.log_message("  IPv6: Deshabilitado", "warning")
+
+    def _supports_ipv6(self):
+        """Verifica si el sistema soporta IPv6."""
+        try:
+            if not socket.has_ipv6:
+                return False
+            test_sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+            test_sock.close()
+            return True
+        except (socket.error, OSError):
+            return False
+
+    def _is_ipv6_address(self, addr):
+        """Verifica si una cadena es una direccion IPv6 valida."""
+        if not addr:
+            return False
+        try:
+            clean_addr = addr.strip('[]')
+            socket.inet_pton(socket.AF_INET6, clean_addr)
+            return True
+        except (socket.error, OSError):
+            return False
+
+    def _is_ipv4_address(self, addr):
+        """Verifica si una cadena es una direccion IPv4 valida."""
+        if not addr:
+            return False
+        try:
+            socket.inet_pton(socket.AF_INET, addr)
+            return True
+        except (socket.error, OSError):
+            return False
 
     def load_config(self):
-        """Lee la IP y el puerto desde config.ini, o crea uno por defecto."""
+        """Lee la configuracion desde config.ini."""
         config = configparser.ConfigParser()
+        network_config = {
+            'priority': 'ipv4',
+            'fallback': True,
+            'connection_timeout': 10000,
+            'retry_count': 5
+        }
 
         if not os.path.exists(self.config_file):
-            config["server"] = {"host": "0.0.0.0", "port": "8080"}
+            config["server"] = {
+                "ipv4_host": "0.0.0.0",
+                "ipv6_host": "::",
+                "port": "9000"
+            }
+            config["network"] = {
+                "priority": "ipv4",
+                "fallback": "true",
+                "connection_timeout": "10000",
+                "retry_count": "5"
+            }
             with open(self.config_file, "w") as configfile:
                 config.write(configfile)
 
         config.read(self.config_file)
-        host = config["server"]["host"]
-        port = int(config["server"]["port"])
-        return host, port
+
+        # Leer configuracion del servidor
+        ipv4_host = config.get("server", "ipv4_host", fallback="")
+        ipv6_host = config.get("server", "ipv6_host", fallback="")
+
+        # Compatibilidad con formato antiguo (host unico)
+        if not ipv4_host and not ipv6_host:
+            legacy_host = config.get("server", "host", fallback="0.0.0.0")
+            if legacy_host == '::' or (legacy_host and ':' in legacy_host and not legacy_host.startswith('0')):
+                ipv6_host = legacy_host
+            else:
+                ipv4_host = legacy_host
+
+        port = int(config.get("server", "port", fallback="9000"))
+
+        # Leer configuracion de red avanzada
+        if config.has_section("network"):
+            network_config['priority'] = config.get("network", "priority", fallback="ipv4").lower()
+            network_config['fallback'] = config.getboolean("network", "fallback", fallback=True)
+            network_config['connection_timeout'] = config.getint("network", "connection_timeout", fallback=10000)
+            network_config['retry_count'] = config.getint("network", "retry_count", fallback=5)
+
+        return ipv4_host, ipv6_host, port, network_config
 
     def create_ui(self):
         """Crea la interfaz gráfica completa"""
@@ -340,49 +394,168 @@ class ScreenShareServerGUI:
         disconnect_button.pack(side="left", padx=2)
 
     def start_server(self):
-        """Inicia el servidor"""
-        try:
-            self.sock = socket.socket(self.address_family, socket.SOCK_STREAM)
-            
-            # Configuración dual-stack
-            if self.address_family == socket.AF_INET6:
+        """Inicia el servidor con listeners duales para IPv4 e IPv6."""
+        started_any = False
+
+        # Iniciar listener IPv4
+        if self.ipv4_host:
+            try:
+                self.sock_ipv4 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.sock_ipv4.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                self.sock_ipv4.bind((self.ipv4_host, self.port))
+                self.sock_ipv4.listen(5)
+
+                self.log_message(f"Listener IPv4 activo: {self.ipv4_host}:{self.port}", "success")
+                started_any = True
+
+                # Thread para aceptar clientes IPv4
+                threading.Thread(target=self._accept_clients_ipv4, daemon=True).start()
+
+            except Exception as e:
+                error_msg = str(e)
+                if "Address already in use" in error_msg:
+                    self.log_message(f"IPv4: Puerto {self.port} ya en uso", "error")
+                else:
+                    self.log_message(f"IPv4: Error - {e}", "error")
+                self.sock_ipv4 = None
+
+        # Iniciar listener IPv6
+        if self.ipv6_host and self._supports_ipv6():
+            try:
+                self.sock_ipv6 = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+                self.sock_ipv6.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+                # IPV6_V6ONLY=1 para que solo acepte IPv6 (IPv4 tiene su propio socket)
                 try:
-                    self.sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
-                    self.log_message("🔧 Modo dual-stack habilitado", "success")
-                except (AttributeError, OSError) as e:
-                    self.log_message(f"⚠️ No se pudo habilitar dual-stack: {e}", "warning")
-            
-            # Permitir reutilizar dirección
-            self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            
-            bind_address = self.get_bind_address()
-            self.sock.bind((bind_address, self.port))
-            self.sock.listen(5)
-            
+                    self.sock_ipv6.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+                except (AttributeError, OSError):
+                    pass
+
+                ipv6_bind = self.ipv6_host.strip('[]')
+                self.sock_ipv6.bind((ipv6_bind, self.port))
+                self.sock_ipv6.listen(5)
+
+                self.log_message(f"Listener IPv6 activo: [{ipv6_bind}]:{self.port}", "success")
+                started_any = True
+
+                # Thread para aceptar clientes IPv6
+                threading.Thread(target=self._accept_clients_ipv6, daemon=True).start()
+
+            except Exception as e:
+                error_msg = str(e)
+                if "Address already in use" in error_msg:
+                    self.log_message(f"IPv6: Puerto {self.port} ya en uso", "error")
+                else:
+                    self.log_message(f"IPv6: Error - {e}", "error")
+                self.sock_ipv6 = None
+        elif self.ipv6_host and not self._supports_ipv6():
+            self.log_message("IPv6: No soportado en este sistema", "warning")
+
+        if started_any:
             self.running = True
-            
+
             # Actualizar UI
-            self.status_label.configure(text="🟢 Estado: Activo")
+            self.status_label.configure(text="Estado: Activo")
             self.start_button.configure(state="disabled")
             self.stop_button.configure(state="normal")
-            
-            self.log_message(f"🚀 Servidor iniciado en {bind_address}:{self.port}", "success")
-            if self.address_family == socket.AF_INET6 and bind_address == '::':
-                self.log_message("📡 Escuchando conexiones IPv4 e IPv6", "success")
-            
-            # Iniciar thread para aceptar clientes
-            threading.Thread(target=self.accept_clients, daemon=True).start()
-            
-        except Exception as e:
-            self.log_message(f"❌ Error al iniciar servidor: {e}", "error")
+
+            # Mostrar resumen
+            active_protocols = []
+            if self.sock_ipv4:
+                active_protocols.append("IPv4")
+            if self.sock_ipv6:
+                active_protocols.append("IPv6")
+
+            self.log_message(f"Servidor activo - Protocolos: {' + '.join(active_protocols)}", "success")
+            self._show_local_addresses()
+        else:
+            self.log_message("No se pudo iniciar ningun listener", "error")
+
+    def _accept_clients_ipv4(self):
+        """Acepta clientes en el socket IPv4."""
+        while self.running and self.sock_ipv4:
+            try:
+                client_sock, addr = self.sock_ipv4.accept()
+                self._handle_new_client(client_sock, addr, "IPv4")
+            except Exception as e:
+                if self.running:
+                    self.log_message(f"Error aceptando cliente IPv4: {e}", "warning")
+
+    def _accept_clients_ipv6(self):
+        """Acepta clientes en el socket IPv6."""
+        while self.running and self.sock_ipv6:
+            try:
+                client_sock, addr = self.sock_ipv6.accept()
+                self._handle_new_client(client_sock, addr, "IPv6")
+            except Exception as e:
+                if self.running:
+                    self.log_message(f"Error aceptando cliente IPv6: {e}", "warning")
+
+    def _handle_new_client(self, client_sock, addr, protocol):
+        """Maneja una nueva conexion de cliente."""
+        addr_str = self.format_address(addr)
+
+        self.log_message(f"Cliente conectado ({protocol}): {addr_str}", "success")
+        self.clients[addr_str] = client_sock
+
+        # Actualizar lista en UI
+        self.root.after(0, self.update_clients_list)
+
+        # Iniciar thread para recibir stream
+        threading.Thread(
+            target=self.receive_stream,
+            args=(client_sock, addr_str),
+            daemon=True
+        ).start()
+
+    def _show_local_addresses(self):
+        """Muestra las direcciones IP locales donde el servidor es accesible."""
+        try:
+            hostname = socket.gethostname()
+            addr_info = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+
+            ipv4_addrs = set()
+            ipv6_addrs = set()
+
+            for info in addr_info:
+                family, _, _, _, sockaddr = info
+                if family == socket.AF_INET:
+                    ipv4_addrs.add(sockaddr[0])
+                elif family == socket.AF_INET6:
+                    addr = sockaddr[0]
+                    if not addr.startswith('fe80'):
+                        ipv6_addrs.add(addr)
+
+            if ipv4_addrs and self.sock_ipv4:
+                self.log_message(f"  IPv4: {', '.join(ipv4_addrs)}", "info")
+            if ipv6_addrs and self.sock_ipv6:
+                self.log_message(f"  IPv6: {', '.join(ipv6_addrs)}", "info")
+
+        except Exception:
+            pass
 
     def stop_server(self):
-        """Detiene el servidor"""
+        """Detiene el servidor (ambos listeners)."""
         self.running = False
-        
-        if self.sock:
-            self.sock.close()
-        
+
+        # Cerrar socket IPv4
+        if self.sock_ipv4:
+            try:
+                self.sock_ipv4.close()
+                self.log_message("Listener IPv4 detenido", "info")
+            except:
+                pass
+            self.sock_ipv4 = None
+
+        # Cerrar socket IPv6
+        if self.sock_ipv6:
+            try:
+                self.sock_ipv6.close()
+                self.log_message("Listener IPv6 detenido", "info")
+            except:
+                pass
+            self.sock_ipv6 = None
+
         # Cerrar todas las conexiones de clientes
         for addr_str, client_data in list(self.clients.items()):
             if isinstance(client_data, tuple):
@@ -393,21 +566,21 @@ class ScreenShareServerGUI:
                 client_sock.close()
             except:
                 pass
-        
+
         self.clients.clear()
-        
-        # Cerrar ventana de visualización si está abierta
+
+        # Cerrar ventana de visualizacion si esta abierta
         if self.current_viewing_window:
             cv2.destroyAllWindows()
             self.current_viewing_window = None
-        
+
         # Actualizar UI
-        self.status_label.configure(text="⚪ Estado: Detenido")
+        self.status_label.configure(text="Estado: Detenido")
         self.start_button.configure(state="normal")
         self.stop_button.configure(state="disabled")
         self.update_clients_list()
-        
-        self.log_message("🛑 Servidor detenido", "warning")
+
+        self.log_message("Servidor detenido", "warning")
 
     def accept_clients(self):
         """Acepta múltiples clientes y crea un hilo para cada uno"""
@@ -434,11 +607,25 @@ class ScreenShareServerGUI:
                     self.log_message(f"⚠️ Error aceptando cliente: {e}", "warning")
 
     def format_address(self, addr):
-        """Formatea la dirección del cliente de manera legible"""
+        """
+        Formatea la direccion del cliente de manera legible.
+        Maneja direcciones IPv4, IPv6, y IPv4-mapped IPv6 (::ffff:x.x.x.x)
+        """
         if len(addr) == 2:
+            # IPv4: (ip, port)
             return f"{addr[0]}:{addr[1]}"
         elif len(addr) == 4:
-            return f"[{addr[0]}]:{addr[1]}"
+            # IPv6: (ip, port, flowinfo, scope_id)
+            ip = addr[0]
+            port = addr[1]
+
+            # Convertir IPv4-mapped IPv6 a formato IPv4 legible
+            # ::ffff:192.168.1.1 -> 192.168.1.1
+            if ip.startswith('::ffff:'):
+                ipv4_addr = ip[7:]  # Remover prefijo ::ffff:
+                return f"{ipv4_addr}:{port} (via IPv6)"
+
+            return f"[{ip}]:{port}"
         else:
             return str(addr)
 
