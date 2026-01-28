@@ -33,10 +33,17 @@ namespace AntiCheat
         private readonly List<string> _blacklistedProcesses;
 
         private SimpleTcpClient _client;
-        private string _serverIp;
+        // Direcciones del servidor - prioridad IPv4 > IPv6 con fallback
+        private string _serverIpv4;
+        private string _serverIpv6;
+        private string _serverIp;  // IP activa seleccionada
         private int _serverPort;
         private string _serverKey;
         private string _gameExecutable;
+
+        // Configuracion de red
+        private string _networkPriority = "ipv4";  // "ipv4" o "ipv6"
+        private bool _networkFallback = true;
 
         private string[] _launchArguments;
         private int _loadingProgress = 0;
@@ -124,9 +131,9 @@ namespace AntiCheat
                 string configPath = Path.Combine(_basePath, "ext11c.dll");
                 if (!File.Exists(configPath))
                 {
-                    string errorMsg = $"Archivo de configuración 'ext11c.dll' no encontrado en: {configPath}";
+                    string errorMsg = $"Archivo de configuracion 'ext11c.dll' no encontrado en: {configPath}";
                     LogError(errorMsg, new Exception("Archivo no encontrado"));
-                    ShowAndExit(errorMsg, "Error de Configuración", 10000);
+                    ShowAndExit(errorMsg, "Error de Configuracion", 10000);
                     return;
                 }
 
@@ -135,39 +142,130 @@ namespace AntiCheat
                 _gameExecutable = tx.IniReadValue("CONFIG", "GAME");
                 if (string.IsNullOrEmpty(_gameExecutable))
                 {
-                    LogError("Valor 'GAME' no encontrado o vacío", new Exception("Configuración faltante"));
+                    LogError("Valor 'GAME' no encontrado o vacio", new Exception("Configuracion faltante"));
                 }
 
-                // Configuración de IP
-                string ipv4 = tx.IniReadValue("CONFIG", "IPV4");
-                string ipv6 = tx.IniReadValue("CONFIG", "IPV6");
+                // Cargar AMBAS direcciones IP
+                _serverIpv4 = tx.IniReadValue("CONFIG", "IPV4");
+                _serverIpv6 = tx.IniReadValue("CONFIG", "IPV6");
 
-                if (!string.IsNullOrWhiteSpace(ipv6)) _serverIp = ipv6;
-                else if (!string.IsNullOrWhiteSpace(ipv4)) _serverIp = ipv4;
-                else _serverIp = tx.IniReadValue("CONFIG", "IP");
+                // Compatibilidad con config legacy
+                if (string.IsNullOrWhiteSpace(_serverIpv4) && string.IsNullOrWhiteSpace(_serverIpv6))
+                {
+                    string legacyIp = tx.IniReadValue("CONFIG", "IP");
+                    if (!string.IsNullOrWhiteSpace(legacyIp))
+                    {
+                        if (legacyIp.Contains(":") && legacyIp != "0.0.0.0")
+                            _serverIpv6 = legacyIp;
+                        else
+                            _serverIpv4 = legacyIp;
+                    }
+                }
+
+                // Cargar configuracion de red (prioridad y fallback)
+                _networkPriority = tx.IniReadValue("network", "priority");
+                if (string.IsNullOrWhiteSpace(_networkPriority))
+                    _networkPriority = "ipv4";
+
+                string fallbackStr = tx.IniReadValue("network", "fallback");
+                if (!string.IsNullOrWhiteSpace(fallbackStr))
+                    _networkFallback = fallbackStr.ToLower() == "true";
+
+                // Seleccionar IP segun prioridad
+                _serverIp = SelectServerIp();
 
                 if (string.IsNullOrEmpty(_serverIp))
                 {
-                    LogError("No se encontró una configuración de IP válida", new Exception("Configuración faltante"));
+                    LogError("No se encontro una configuracion de IP valida", new Exception("Configuracion faltante"));
                 }
+
+                LogClientStatus($"Configuracion de red: Prioridad={_networkPriority.ToUpper()}, Fallback={_networkFallback}");
+                LogClientStatus($"  IPv4: {(_serverIpv4 ?? "No configurado")}");
+                LogClientStatus($"  IPv6: {(_serverIpv6 ?? "No configurado")}");
+                LogClientStatus($"  IP seleccionada: {_serverIp}");
 
                 string portStr = tx.IniReadValue("CONFIG", "PORT");
                 if (string.IsNullOrEmpty(portStr) || !int.TryParse(portStr, out _serverPort))
                 {
-                    LogError("Valor 'PORT' inválido", new Exception("Configuración inválida"));
+                    LogError("Valor 'PORT' invalido", new Exception("Configuracion invalida"));
                 }
 
                 _serverKey = tx.IniReadValue("CONFIG", "KEY");
                 if (string.IsNullOrEmpty(_serverKey))
                 {
-                    LogError("Valor 'KEY' no encontrado", new Exception("Configuración faltante"));
+                    LogError("Valor 'KEY' no encontrado", new Exception("Configuracion faltante"));
                 }
             }
             catch (Exception ex)
             {
                 LogError($"Error loading configuration", ex);
-                ShowAndExit($"Error loading configuration: {ex.Message}", "Error de Configuración", 10000);
+                ShowAndExit($"Error loading configuration: {ex.Message}", "Error de Configuracion", 10000);
             }
+        }
+
+        private string SelectServerIp()
+        {
+            // Seleccionar IP segun prioridad configurada
+            if (_networkPriority.ToLower() == "ipv6")
+            {
+                // Prioridad IPv6
+                if (!string.IsNullOrWhiteSpace(_serverIpv6))
+                    return _serverIpv6.Trim('[', ']');
+                if (_networkFallback && !string.IsNullOrWhiteSpace(_serverIpv4))
+                    return _serverIpv4;
+            }
+            else
+            {
+                // Prioridad IPv4 (por defecto)
+                if (!string.IsNullOrWhiteSpace(_serverIpv4))
+                    return _serverIpv4;
+                if (_networkFallback && !string.IsNullOrWhiteSpace(_serverIpv6))
+                    return _serverIpv6.Trim('[', ']');
+            }
+
+            return null;
+        }
+
+        private bool TryFallbackConnection()
+        {
+            // Si el fallback esta habilitado y hay otra IP disponible, intentar con ella
+            if (!_networkFallback)
+                return false;
+
+            string alternateIp = null;
+
+            if (_networkPriority.ToLower() == "ipv6")
+            {
+                // Estabamos usando IPv6, intentar IPv4
+                if (!string.IsNullOrWhiteSpace(_serverIpv4))
+                    alternateIp = _serverIpv4;
+            }
+            else
+            {
+                // Estabamos usando IPv4, intentar IPv6
+                if (!string.IsNullOrWhiteSpace(_serverIpv6))
+                    alternateIp = _serverIpv6.Trim('[', ']');
+            }
+
+            if (string.IsNullOrEmpty(alternateIp))
+                return false;
+
+            LogClientStatus($"Intentando fallback a IP alternativa: {alternateIp}");
+            _serverIp = alternateIp;
+
+            // Reinicializar cliente con nueva IP
+            try
+            {
+                if (_client != null)
+                {
+                    _client.Disconnect();
+                    _client.Dispose();
+                }
+            }
+            catch { }
+
+            InitializeClient();
+            return _client != null;
         }
 
         #endregion
@@ -1093,13 +1191,41 @@ namespace AntiCheat
                 System.Threading.Thread.Sleep(delayMs);
             }
 
+            // Intentar fallback a IP alternativa si esta habilitado
+            if (_networkFallback && TryFallbackConnection())
+            {
+                LogClientStatus("Intentando conexion con IP alternativa...");
+
+                // Reintentar con la nueva IP (solo 2 intentos)
+                for (int i = 0; i < 2; i++)
+                {
+                    try
+                    {
+                        LogClientStatus($"Intento fallback {i + 1}/2 a {_serverIp}:{_serverPort}");
+                        _client.Connect();
+                        System.Threading.Thread.Sleep(2000);
+
+                        if (_client.IsConnected)
+                        {
+                            LogClientStatus("Conexion establecida via fallback");
+                            return true;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogError($"Error en fallback {i + 1}", ex);
+                    }
+                    System.Threading.Thread.Sleep(2000);
+                }
+            }
+
             if (hasNetworkIssue)
             {
                 LogClientStatus("Verifica: 1) Conexion a internet 2) Firewall 3) Direccion del servidor");
             }
             else
             {
-                LogClientStatus($"Fallaron los {maxRetries} intentos de conexion");
+                LogClientStatus($"Fallaron todos los intentos de conexion (incluido fallback)");
             }
 
             return false;

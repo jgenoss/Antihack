@@ -28,13 +28,17 @@ namespace ServerTCP
         private readonly ClassJson _jsonHelper = new ClassJson();
         private readonly encrypt_decrypt _crypto = new encrypt_decrypt();
 
-        private SimpleTcpServer _server;
-        private string _serverIp;
+        // Servidores duales - IPv4 e IPv6 simultaneamente
+        private SimpleTcpServer _serverIPv4;
+        private SimpleTcpServer _serverIPv6;
+        private string _serverIpv4;
+        private string _serverIpv6;
         private int _serverPort;
         private string _serverKey;
 
         // Stream Viewer Config
-        private string _streamHost;
+        private string _streamHostIPv4;
+        private string _streamHostIPv6;
         private int _streamPort;
 
         // Client Management
@@ -76,7 +80,16 @@ namespace ServerTCP
 
         private void InitializeGui()
         {
-            inputServerIp.Text = $"{_serverIp}:{_serverPort}";
+            // Mostrar ambas direcciones configuradas
+            string displayText = "";
+            if (!string.IsNullOrWhiteSpace(_serverIpv4))
+                displayText += $"IPv4: {_serverIpv4}:{_serverPort}";
+            if (!string.IsNullOrWhiteSpace(_serverIpv6))
+            {
+                if (!string.IsNullOrEmpty(displayText)) displayText += " | ";
+                displayText += $"IPv6: [{_serverIpv6}]:{_serverPort}";
+            }
+            inputServerIp.Text = displayText;
             inputSelect.SelectedIndex = 0;
             btnSend.Enabled = false;
         }
@@ -87,23 +100,43 @@ namespace ServerTCP
             {
                 INIFile ini = new INIFile(Path.Combine(_basePath, "Config.ini"));
 
-                // Network Configuration
-                string ipv4 = ini.IniReadValue("CONFIG", "IPV4");
-                string ipv6 = ini.IniReadValue("CONFIG", "IPV6");
+                // Network Configuration - Ambas direcciones para listeners duales
+                _serverIpv4 = ini.IniReadValue("CONFIG", "IPV4");
+                _serverIpv6 = ini.IniReadValue("CONFIG", "IPV6");
 
-                // Priority: IPv6 > IPv4 > Legacy
-                if (!string.IsNullOrWhiteSpace(ipv6))
-                    _serverIp = ipv6;
-                else if (!string.IsNullOrWhiteSpace(ipv4))
-                    _serverIp = ipv4;
-                else
-                    _serverIp = ini.IniReadValue("CONFIG", "IP");
+                // Compatibilidad con config legacy (IP unica)
+                if (string.IsNullOrWhiteSpace(_serverIpv4) && string.IsNullOrWhiteSpace(_serverIpv6))
+                {
+                    string legacyIp = ini.IniReadValue("CONFIG", "IP");
+                    if (!string.IsNullOrWhiteSpace(legacyIp))
+                    {
+                        if (legacyIp.Contains(":"))
+                            _serverIpv6 = legacyIp;
+                        else
+                            _serverIpv4 = legacyIp;
+                    }
+                }
 
                 _serverPort = int.Parse(ini.IniReadValue("CONFIG", "PORT"));
                 _serverKey = ini.IniReadValue("CONFIG", "KEY");
 
-                // Stream Configuration
-                _streamHost = ini.IniReadValue("server", "host");
+                // Stream Configuration - Ambas direcciones
+                _streamHostIPv4 = ini.IniReadValue("server", "ipv4_host");
+                _streamHostIPv6 = ini.IniReadValue("server", "ipv6_host");
+
+                // Compatibilidad con config legacy
+                if (string.IsNullOrWhiteSpace(_streamHostIPv4) && string.IsNullOrWhiteSpace(_streamHostIPv6))
+                {
+                    string legacyHost = ini.IniReadValue("server", "host");
+                    if (!string.IsNullOrWhiteSpace(legacyHost))
+                    {
+                        if (legacyHost.Contains(":") && legacyHost != "0.0.0.0")
+                            _streamHostIPv6 = legacyHost;
+                        else
+                            _streamHostIPv4 = legacyHost;
+                    }
+                }
+
                 _streamPort = int.Parse(ini.IniReadValue("server", "port"));
             }
             catch (Exception ex)
@@ -116,24 +149,43 @@ namespace ServerTCP
         {
             try
             {
-                string listenAddress = GetDualStackListenAddress(_serverIp);
-                _server = new SimpleTcpServer(listenAddress, _serverPort);
-
-                // High Performance Settings
-                _server.Settings.MaxConnections = 2000;
-                _server.Settings.NoDelay = true;
-                _server.Keepalive = new SimpleTcpKeepaliveSettings
+                // Inicializar servidor IPv4 si esta configurado
+                if (!string.IsNullOrWhiteSpace(_serverIpv4))
                 {
-                    EnableTcpKeepAlives = true,
-                    TcpKeepAliveInterval = 5,
-                    TcpKeepAliveTime = 5,
-                    TcpKeepAliveRetryCount = 5,
-                };
+                    try
+                    {
+                        _serverIPv4 = new SimpleTcpServer(_serverIpv4, _serverPort);
+                        ConfigureServer(_serverIPv4);
+                        LogSystemMessage($"IPv4 listener preparado: {_serverIpv4}:{_serverPort}");
+                    }
+                    catch (Exception ex)
+                    {
+                        LogSystemMessage($"IPv4 init error: {ex.Message}");
+                        _serverIPv4 = null;
+                    }
+                }
 
-                // Event Binding
-                _server.Events.ClientConnected += OnClientConnected;
-                _server.Events.ClientDisconnected += OnClientDisconnected;
-                _server.Events.DataReceived += OnDataReceived;
+                // Inicializar servidor IPv6 si esta configurado
+                if (!string.IsNullOrWhiteSpace(_serverIpv6))
+                {
+                    try
+                    {
+                        string ipv6Addr = _serverIpv6.Trim('[', ']');
+                        _serverIPv6 = new SimpleTcpServer(ipv6Addr, _serverPort);
+                        ConfigureServer(_serverIPv6);
+                        LogSystemMessage($"IPv6 listener preparado: [{ipv6Addr}]:{_serverPort}");
+                    }
+                    catch (Exception ex)
+                    {
+                        LogSystemMessage($"IPv6 init error: {ex.Message}");
+                        _serverIPv6 = null;
+                    }
+                }
+
+                if (_serverIPv4 == null && _serverIPv6 == null)
+                {
+                    LogSystemMessage("ERROR: No se pudo inicializar ningun servidor");
+                }
 
                 // Maintenance Timers
                 InitializeTimers();
@@ -142,6 +194,25 @@ namespace ServerTCP
             {
                 LogSystemMessage($"Initialization Failed: {ex.Message}");
             }
+        }
+
+        private void ConfigureServer(SimpleTcpServer server)
+        {
+            // High Performance Settings
+            server.Settings.MaxConnections = 2000;
+            server.Settings.NoDelay = true;
+            server.Keepalive = new SimpleTcpKeepaliveSettings
+            {
+                EnableTcpKeepAlives = true,
+                TcpKeepAliveInterval = 5,
+                TcpKeepAliveTime = 5,
+                TcpKeepAliveRetryCount = 5,
+            };
+
+            // Event Binding
+            server.Events.ClientConnected += OnClientConnected;
+            server.Events.ClientDisconnected += OnClientDisconnected;
+            server.Events.DataReceived += OnDataReceived;
         }
 
         private void InitializeTimers()
@@ -306,7 +377,7 @@ namespace ServerTCP
                 }
             }
 
-            foreach (var ip in clientsToRemove) _server.DisconnectClient(ip);
+            foreach (var ip in clientsToRemove) DisconnectClientFromServer(ip);
         }
 
         #endregion
@@ -319,7 +390,7 @@ namespace ServerTCP
             {
                 if (IsIpBlacklisted(e.IpPort))
                 {
-                    _server.DisconnectClient(e.IpPort);
+                    DisconnectClientFromServer(e.IpPort);
                     LogSystemMessage($"Security: Blocked blacklisted IP {e.IpPort}");
                     return;
                 }
@@ -399,7 +470,7 @@ namespace ServerTCP
                     if (!_authenticatedClients.ContainsKey(ipPort) || !_authenticatedClients[ipPort])
                     {
                         LogSystemMessage($"Security: Unauthorized action '{action}' from {ipPort}");
-                        _server.DisconnectClient(ipPort);
+                        DisconnectClientFromServer(ipPort);
                         return;
                     }
                 }
@@ -479,9 +550,21 @@ namespace ServerTCP
         private void UpdateServerStats()
         {
             int authCount = _authenticatedClients.Count(c => c.Value);
-            long rx = _server.Statistics.ReceivedBytes;
-            long tx = _server.Statistics.SentBytes;
-            toolStripStatusLabel2.Text = $"Auth Clients: {authCount} | RX: {FormatBytes(rx)} | TX: {FormatBytes(tx)}";
+
+            // Sumar estadisticas de ambos servidores
+            long rx = 0, tx = 0;
+            if (_serverIPv4 != null)
+            {
+                rx += _serverIPv4.Statistics.ReceivedBytes;
+                tx += _serverIPv4.Statistics.SentBytes;
+            }
+            if (_serverIPv6 != null)
+            {
+                rx += _serverIPv6.Statistics.ReceivedBytes;
+                tx += _serverIPv6.Statistics.SentBytes;
+            }
+
+            toolStripStatusLabel2.Text = $"Auth: {authCount} | RX: {FormatBytes(rx)} | TX: {FormatBytes(tx)}";
             toolStripStatusLabel1.Text = $"Connected: {_connectedClients.Count}";
         }
 
@@ -513,64 +596,89 @@ namespace ServerTCP
 
         private void btnStart_Click(object sender, EventArgs e)
         {
-            try
+            bool startedAny = false;
+            List<string> activeProtocols = new List<string>();
+
+            // Iniciar servidor IPv4
+            if (_serverIPv4 != null)
             {
-                _server.Start();
-
-                // Obtener la direccion real de escucha
-                string listenAddr = GetDualStackListenAddress(_serverIp);
-                inputServerIp.Text = $"{listenAddr}:{_serverPort}";
-
-                // Determinar el modo de escucha
-                string modeDesc = "";
-                if (listenAddr == "::")
-                    modeDesc = "Dual-Stack (IPv4 + IPv6)";
-                else if (listenAddr.Contains(":"))
-                    modeDesc = "IPv6 only";
-                else
-                    modeDesc = "IPv4 only";
-
-                LogSystemMessage($"Server started on {listenAddr}:{_serverPort}");
-                LogSystemMessage($"Network mode: {modeDesc}");
-
-                // Mostrar direcciones locales disponibles
                 try
                 {
-                    string hostName = Dns.GetHostName();
-                    IPAddress[] addresses = Dns.GetHostAddresses(hostName);
-                    foreach (var addr in addresses)
-                    {
-                        if (addr.AddressFamily == AddressFamily.InterNetwork)
-                            LogSystemMessage($"  IPv4: {addr}:{_serverPort}");
-                        else if (addr.AddressFamily == AddressFamily.InterNetworkV6 && !addr.IsIPv6LinkLocal)
-                            LogSystemMessage($"  IPv6: [{addr}]:{_serverPort}");
-                    }
+                    _serverIPv4.Start();
+                    LogSystemMessage($"IPv4 listener activo: {_serverIpv4}:{_serverPort}");
+                    activeProtocols.Add("IPv4");
+                    startedAny = true;
                 }
-                catch { /* No es critico */ }
+                catch (Exception ex)
+                {
+                    LogSystemMessage($"IPv4 start failed: {GetFriendlyError(ex)}");
+                }
+            }
+
+            // Iniciar servidor IPv6
+            if (_serverIPv6 != null)
+            {
+                try
+                {
+                    _serverIPv6.Start();
+                    LogSystemMessage($"IPv6 listener activo: [{_serverIpv6}]:{_serverPort}");
+                    activeProtocols.Add("IPv6");
+                    startedAny = true;
+                }
+                catch (Exception ex)
+                {
+                    LogSystemMessage($"IPv6 start failed: {GetFriendlyError(ex)}");
+                }
+            }
+
+            if (startedAny)
+            {
+                LogSystemMessage($"Servidor activo - Protocolos: {string.Join(" + ", activeProtocols)}");
+
+                // Mostrar direcciones locales disponibles
+                ShowLocalAddresses();
 
                 btnStart.Enabled = false;
                 btnSend.Enabled = true;
             }
-            catch (Exception ex)
+            else
             {
-                string errorMsg = ex.Message;
-
-                // Mensajes de error mas amigables
-                if (errorMsg.Contains("Address already in use") || errorMsg.Contains("Only one usage"))
-                    errorMsg = $"Port {_serverPort} is already in use. Close other applications using this port.";
-                else if (errorMsg.Contains("Access denied") || errorMsg.Contains("Permission"))
-                    errorMsg = $"Access denied for port {_serverPort}. Run as administrator for ports < 1024.";
-                else if (errorMsg.Contains("network") || errorMsg.Contains("socket"))
-                    errorMsg = $"Network error: {ex.Message}\nCheck firewall settings and network configuration.";
-
-                MessageBox.Show(errorMsg, "Server Start Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                LogSystemMessage($"Start failed: {errorMsg}");
+                MessageBox.Show("No se pudo iniciar ningun servidor.\nVerifique la configuracion de red.",
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private string GetFriendlyError(Exception ex)
+        {
+            string msg = ex.Message;
+            if (msg.Contains("Address already in use") || msg.Contains("Only one usage"))
+                return $"Puerto {_serverPort} ya esta en uso";
+            if (msg.Contains("Access denied") || msg.Contains("Permission"))
+                return $"Sin permisos para puerto {_serverPort}";
+            return msg;
+        }
+
+        private void ShowLocalAddresses()
+        {
+            try
+            {
+                string hostName = Dns.GetHostName();
+                IPAddress[] addresses = Dns.GetHostAddresses(hostName);
+
+                foreach (var addr in addresses)
+                {
+                    if (addr.AddressFamily == AddressFamily.InterNetwork && _serverIPv4 != null)
+                        LogSystemMessage($"  Disponible IPv4: {addr}:{_serverPort}");
+                    else if (addr.AddressFamily == AddressFamily.InterNetworkV6 && !addr.IsIPv6LinkLocal && _serverIPv6 != null)
+                        LogSystemMessage($"  Disponible IPv6: [{addr}]:{_serverPort}");
+                }
+            }
+            catch { /* No es critico */ }
         }
 
         private void btnSend_Click(object sender, EventArgs e)
         {
-            if (!_server.IsListening) return;
+            if (!IsServerListening()) return;
             if (inputSelect.SelectedIndex == 0 || lstClientIP.SelectedItem == null)
             {
                 MessageBox.Show("Select a target and action.");
@@ -593,7 +701,7 @@ namespace ServerTCP
                     cmdName = "SHUTDOWN";
                     break;
                 case 2: // Disconnect
-                    _server.DisconnectClient(targetIp);
+                    DisconnectClientFromServer(targetIp);
                     LogSystemMessage($"Command: Disconnected {targetIp}");
                     return;
                 case 3: // Stream Viewer
@@ -618,18 +726,69 @@ namespace ServerTCP
         {
             try
             {
-                _server.Send(ip, data);
-                if (_connectedClients.ContainsKey(ip))
+                bool sent = false;
+
+                // Intentar enviar por IPv4
+                if (_serverIPv4 != null && _serverIPv4.IsListening)
                 {
-                    _connectedClients[ip].LastActivityTime = DateTime.Now;
-                    _connectedClients[ip].BytesSent += Encoding.UTF8.GetBytes(data).Length;
+                    try
+                    {
+                        _serverIPv4.Send(ip, data);
+                        sent = true;
+                    }
+                    catch { }
                 }
-                LogSystemMessage($"Command Sent: {description} -> {ip}");
+
+                // Si no se envio por IPv4, intentar IPv6
+                if (!sent && _serverIPv6 != null && _serverIPv6.IsListening)
+                {
+                    try
+                    {
+                        _serverIPv6.Send(ip, data);
+                        sent = true;
+                    }
+                    catch { }
+                }
+
+                if (sent)
+                {
+                    if (_connectedClients.ContainsKey(ip))
+                    {
+                        _connectedClients[ip].LastActivityTime = DateTime.Now;
+                        _connectedClients[ip].BytesSent += Encoding.UTF8.GetBytes(data).Length;
+                    }
+                    LogSystemMessage($"Command Sent: {description} -> {ip}");
+                }
+                else
+                {
+                    LogSystemMessage($"Send Failed: Client {ip} not found on any server");
+                }
             }
             catch (Exception ex)
             {
                 LogSystemMessage($"Send Error: {ex.Message}");
             }
+        }
+
+        private bool IsServerListening()
+        {
+            return (_serverIPv4 != null && _serverIPv4.IsListening) ||
+                   (_serverIPv6 != null && _serverIPv6.IsListening);
+        }
+
+        private void DisconnectClientFromServer(string ipPort)
+        {
+            try
+            {
+                if (_serverIPv4 != null) _serverIPv4.DisconnectClient(ipPort);
+            }
+            catch { }
+
+            try
+            {
+                if (_serverIPv6 != null) _serverIPv6.DisconnectClient(ipPort);
+            }
+            catch { }
         }
 
         private void searchBox_TextChanged(object sender, EventArgs e)
