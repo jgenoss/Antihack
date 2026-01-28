@@ -921,11 +921,19 @@ namespace AntiCheat
             {
                 string normalizedIp = NormalizeIpAddress(_serverIp);
 
+                // Validar que la direccion sea alcanzable
+                if (!ValidateServerAddress(normalizedIp))
+                {
+                    LogClientStatus($"Advertencia: No se pudo validar la direccion {normalizedIp}");
+                }
+
                 _client = new SimpleTcpClient(normalizedIp, _serverPort);
                 _client.Events.Connected += Events_Connected;
                 _client.Events.DataReceived += Events_DataReceived;
                 _client.Events.Disconnected += Events_Disconnected;
-                LogClientStatus($"Cliente TCP inicializado correctamente para {normalizedIp}:{_serverPort}");
+
+                string addrType = GetAddressType(normalizedIp);
+                LogClientStatus($"Cliente TCP inicializado para {normalizedIp}:{_serverPort} ({addrType})");
             }
             catch (Exception ex)
             {
@@ -936,63 +944,197 @@ namespace AntiCheat
 
         private string NormalizeIpAddress(string ipAddress)
         {
+            if (string.IsNullOrWhiteSpace(ipAddress))
+            {
+                LogError("Direccion IP vacia", new ArgumentException("IP address is empty"));
+                return "127.0.0.1";
+            }
+
             try
             {
-                if (IPAddress.TryParse(ipAddress, out IPAddress parsedIp))
+                // Remover brackets de IPv6 si existen: [::1] -> ::1
+                string cleanAddr = ipAddress.Trim().Trim('[', ']');
+
+                // Intentar parsear directamente
+                if (IPAddress.TryParse(cleanAddr, out IPAddress parsedIp))
                 {
-                    if (parsedIp.AddressFamily == AddressFamily.InterNetworkV6)
+                    return parsedIp.ToString();
+                }
+
+                // Si no es una IP, podria ser un hostname - resolver
+                try
+                {
+                    IPAddress[] addresses = Dns.GetHostAddresses(cleanAddr);
+                    if (addresses.Length > 0)
                     {
-                        return parsedIp.ToString();
-                    }
-                    else
-                    {
-                        return parsedIp.ToString();
+                        // Preferir IPv4 para mayor compatibilidad, a menos que solo haya IPv6
+                        IPAddress preferred = addresses.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetwork)
+                                           ?? addresses.FirstOrDefault(a => a.AddressFamily == AddressFamily.InterNetworkV6)
+                                           ?? addresses[0];
+
+                        LogClientStatus($"Hostname '{cleanAddr}' resuelto a {preferred}");
+                        return preferred.ToString();
                     }
                 }
+                catch (Exception ex)
+                {
+                    LogError($"Error resolviendo hostname '{cleanAddr}'", ex);
+                }
+
+                return cleanAddr;
+            }
+            catch (Exception ex)
+            {
+                LogError("Error normalizando direccion IP", ex);
                 return ipAddress;
+            }
+        }
+
+        private bool ValidateServerAddress(string ipAddress)
+        {
+            try
+            {
+                if (IPAddress.TryParse(ipAddress, out IPAddress addr))
+                {
+                    // Verificar si es direccion de loopback
+                    if (IPAddress.IsLoopback(addr))
+                    {
+                        LogClientStatus("Conectando a servidor local (loopback)");
+                        return true;
+                    }
+
+                    // Verificar si la direccion es valida para conexion
+                    if (addr.Equals(IPAddress.Any) || addr.Equals(IPAddress.IPv6Any))
+                    {
+                        LogError("Direccion no valida para conexion", new ArgumentException("Cannot connect to 0.0.0.0 or ::"));
+                        return false;
+                    }
+
+                    return true;
+                }
+
+                // Si no se puede parsear, asumir que es valido (hostname)
+                return true;
             }
             catch
             {
-                return ipAddress;
+                return false;
             }
+        }
+
+        private string GetAddressType(string ipAddress)
+        {
+            if (IPAddress.TryParse(ipAddress, out IPAddress addr))
+            {
+                if (addr.AddressFamily == AddressFamily.InterNetworkV6)
+                    return "IPv6";
+                else if (addr.AddressFamily == AddressFamily.InterNetwork)
+                    return "IPv4";
+            }
+            return "hostname";
         }
 
         private bool ConnectWithRetries(int timeoutMs, int maxRetries = 5)
         {
             if (_client == null)
             {
-                LogError("Error de conexión", new Exception("Cliente TCP no inicializado"));
+                LogError("Error de conexion", new Exception("Cliente TCP no inicializado"));
                 return false;
             }
 
             int retryCount = 0;
+            int baseDelayMs = 2000;
+            bool hasNetworkIssue = false;
+
             while (retryCount < maxRetries)
             {
                 try
                 {
-                    LogClientStatus($"Intento de conexión {retryCount + 1}/{maxRetries}");
+                    LogClientStatus($"Intento de conexion {retryCount + 1}/{maxRetries} a {_serverIp}:{_serverPort}");
                     _client.Connect();
 
-                    // Aumentar el tiempo de espera para verificar la estabilidad de la conexión
-                    System.Threading.Thread.Sleep(2000); // Esperar 2 segundos
+                    // Esperar para verificar estabilidad de conexion
+                    System.Threading.Thread.Sleep(2000);
 
                     if (_client.IsConnected)
                     {
-                        LogClientStatus("Conexión estable después de 2 segundos");
+                        LogClientStatus("Conexion establecida y estable");
                         return true;
+                    }
+                    else
+                    {
+                        LogClientStatus("Conexion cerrada inmediatamente por el servidor");
+                    }
+                }
+                catch (SocketException sockEx)
+                {
+                    // Manejar errores especificos de socket
+                    string errorDetail = GetSocketErrorDescription(sockEx.SocketErrorCode);
+                    LogError($"Error de socket: {errorDetail}", sockEx);
+
+                    // Si es un error de red que no se resolvera con reintentos, salir antes
+                    if (IsUnrecoverableNetworkError(sockEx.SocketErrorCode))
+                    {
+                        hasNetworkIssue = true;
+                        LogClientStatus("Error de red no recuperable, abortando reintentos");
+                        break;
                     }
                 }
                 catch (Exception ex)
                 {
-                    LogError($"Error en intento de conexión {retryCount + 1}", ex);
+                    LogError($"Error en intento de conexion {retryCount + 1}", ex);
                 }
 
                 retryCount++;
-                System.Threading.Thread.Sleep(2000); // Aumentar de 1 a 2 segundos entre reintentos
+
+                // Backoff exponencial: 2s, 4s, 6s, 8s...
+                int delayMs = Math.Min(baseDelayMs * retryCount, 10000);
+                LogClientStatus($"Esperando {delayMs}ms antes del siguiente intento...");
+                System.Threading.Thread.Sleep(delayMs);
             }
 
-            LogClientStatus($"Fallaron todos los {maxRetries} intentos de conexión");
+            if (hasNetworkIssue)
+            {
+                LogClientStatus("Verifica: 1) Conexion a internet 2) Firewall 3) Direccion del servidor");
+            }
+            else
+            {
+                LogClientStatus($"Fallaron los {maxRetries} intentos de conexion");
+            }
+
             return false;
+        }
+
+        private string GetSocketErrorDescription(SocketError errorCode)
+        {
+            switch (errorCode)
+            {
+                case SocketError.ConnectionRefused:
+                    return "Conexion rechazada - El servidor no esta ejecutandose o el puerto esta cerrado";
+                case SocketError.NetworkUnreachable:
+                    return "Red inalcanzable - Verifica tu conexion a internet";
+                case SocketError.HostUnreachable:
+                    return "Host inalcanzable - El servidor no esta disponible";
+                case SocketError.TimedOut:
+                    return "Tiempo de espera agotado - El servidor no responde";
+                case SocketError.AddressNotAvailable:
+                    return "Direccion no disponible - Verifica la configuracion de IP";
+                case SocketError.AddressFamilyNotSupported:
+                    return "Familia de direcciones no soportada - IPv6 puede no estar disponible";
+                case SocketError.HostNotFound:
+                    return "Host no encontrado - Verifica el nombre del servidor";
+                default:
+                    return $"Error de socket ({errorCode})";
+            }
+        }
+
+        private bool IsUnrecoverableNetworkError(SocketError errorCode)
+        {
+            // Errores que indican problemas de configuracion, no temporales
+            return errorCode == SocketError.AddressFamilyNotSupported ||
+                   errorCode == SocketError.AddressNotAvailable ||
+                   errorCode == SocketError.HostNotFound ||
+                   errorCode == SocketError.ProtocolNotSupported;
         }
 
         private async Task ConnectToServerAsync()

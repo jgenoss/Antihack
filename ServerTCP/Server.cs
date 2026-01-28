@@ -161,37 +161,119 @@ namespace ServerTCP
 
         private string GetDualStackListenAddress(string configuredIp)
         {
+            // Caso: vacio o null - usar dual-stack
             if (string.IsNullOrWhiteSpace(configuredIp)) return "::";
+
+            // Caso: direccion IPv4 any (0.0.0.0) - convertir a dual-stack
             if (configuredIp == "0.0.0.0") return "::";
 
-            if (IPAddress.TryParse(configuredIp, out IPAddress ipAddr))
+            // Caso: direccion IPv6 any (::) - ya es dual-stack
+            if (configuredIp == "::") return "::";
+
+            // Intentar parsear la direccion
+            if (IPAddress.TryParse(configuredIp.Trim('[', ']'), out IPAddress ipAddr))
             {
-                if (ipAddr.AddressFamily == AddressFamily.InterNetworkV6) return configuredIp;
-                if (ipAddr.Equals(IPAddress.Any)) return "::";
+                // Si es IPv6, usarla directamente
+                if (ipAddr.AddressFamily == AddressFamily.InterNetworkV6)
+                    return ipAddr.ToString();
+
+                // Si es IPv4 Any, usar dual-stack
+                if (ipAddr.Equals(IPAddress.Any))
+                    return "::";
+
+                // Si es IPv4 especifica, usarla (no dual-stack)
+                if (ipAddr.AddressFamily == AddressFamily.InterNetwork)
+                    return ipAddr.ToString();
             }
+
+            // Si no se puede parsear, intentar resolver como hostname
+            try
+            {
+                IPAddress[] addresses = Dns.GetHostAddresses(configuredIp);
+                // Preferir IPv6 si esta disponible
+                foreach (var addr in addresses)
+                {
+                    if (addr.AddressFamily == AddressFamily.InterNetworkV6)
+                        return addr.ToString();
+                }
+                // Fallback a IPv4
+                foreach (var addr in addresses)
+                {
+                    if (addr.AddressFamily == AddressFamily.InterNetwork)
+                        return addr.ToString();
+                }
+            }
+            catch (Exception ex)
+            {
+                LogSystemMessage($"Error resolviendo hostname '{configuredIp}': {ex.Message}");
+            }
+
             return configuredIp;
         }
 
         private string ExtractIpAddress(string ipPort)
         {
+            if (string.IsNullOrEmpty(ipPort)) return string.Empty;
+
             try
             {
                 string ip = ipPort;
+
+                // Caso IPv6 con brackets: [::1]:8080 o [::ffff:192.168.1.1]:8080
                 if (ipPort.StartsWith("["))
                 {
                     int endBracket = ipPort.IndexOf("]");
-                    if (endBracket > 0) ip = ipPort.Substring(1, endBracket - 1);
+                    if (endBracket > 0)
+                        ip = ipPort.Substring(1, endBracket - 1);
                 }
-                else
+                // Caso IPv4: 192.168.1.1:8080
+                else if (ipPort.Contains(":"))
                 {
-                    int lastColon = ipPort.LastIndexOf(":");
-                    if (lastColon > 0) ip = ipPort.Substring(0, lastColon);
+                    // Contar los dos puntos para distinguir IPv4:port de IPv6
+                    int colonCount = ipPort.Count(c => c == ':');
+                    if (colonCount == 1)
+                    {
+                        // Es IPv4:port
+                        int lastColon = ipPort.LastIndexOf(":");
+                        if (lastColon > 0)
+                            ip = ipPort.Substring(0, lastColon);
+                    }
+                    // Si tiene mas de un ":", es IPv6 sin brackets (no deberia pasar pero por seguridad)
                 }
 
-                if (ip != null && ip.StartsWith("::ffff:")) ip = ip.Substring(7);
-                return ip;
+                // Convertir IPv4-mapped IPv6 a IPv4 pura
+                // ::ffff:192.168.1.1 -> 192.168.1.1
+                if (!string.IsNullOrEmpty(ip) && ip.StartsWith("::ffff:", StringComparison.OrdinalIgnoreCase))
+                    ip = ip.Substring(7);
+
+                return ip ?? ipPort;
             }
-            catch { return ipPort; }
+            catch
+            {
+                return ipPort;
+            }
+        }
+
+        private string GetClientDisplayAddress(string ipPort)
+        {
+            string ip = ExtractIpAddress(ipPort);
+
+            // Si es localhost IPv6, mostrar como localhost
+            if (ip == "::1") return "localhost (IPv6)";
+            if (ip == "127.0.0.1") return "localhost (IPv4)";
+
+            // Indicar si la conexion vino via IPv4-mapped
+            if (ipPort.Contains("::ffff:"))
+                return $"{ip} (IPv4 via IPv6)";
+
+            // Verificar si es direccion IPv6
+            if (IPAddress.TryParse(ip, out IPAddress addr))
+            {
+                if (addr.AddressFamily == AddressFamily.InterNetworkV6)
+                    return $"{ip} (IPv6)";
+            }
+
+            return ip;
         }
 
         private bool IsIpBlacklisted(string ipPort)
@@ -242,6 +324,8 @@ namespace ServerTCP
                     return;
                 }
 
+                string displayAddr = GetClientDisplayAddress(e.IpPort);
+
                 _connectedClients[e.IpPort] = new ClientInfo
                 {
                     IpPort = e.IpPort,
@@ -251,6 +335,7 @@ namespace ServerTCP
                 };
 
                 lstClientIP.Items.Add(e.IpPort);
+                LogSystemMessage($"Client connected: {displayAddr}");
                 UpdateServerStats();
             });
         }
@@ -431,14 +516,55 @@ namespace ServerTCP
             try
             {
                 _server.Start();
-                inputServerIp.Text = $"{_serverIp}:{_serverPort}";
-                LogSystemMessage($"Server Service Started on {_serverIp}:{_serverPort} (Dual-Stack)");
+
+                // Obtener la direccion real de escucha
+                string listenAddr = GetDualStackListenAddress(_serverIp);
+                inputServerIp.Text = $"{listenAddr}:{_serverPort}";
+
+                // Determinar el modo de escucha
+                string modeDesc = "";
+                if (listenAddr == "::")
+                    modeDesc = "Dual-Stack (IPv4 + IPv6)";
+                else if (listenAddr.Contains(":"))
+                    modeDesc = "IPv6 only";
+                else
+                    modeDesc = "IPv4 only";
+
+                LogSystemMessage($"Server started on {listenAddr}:{_serverPort}");
+                LogSystemMessage($"Network mode: {modeDesc}");
+
+                // Mostrar direcciones locales disponibles
+                try
+                {
+                    string hostName = Dns.GetHostName();
+                    IPAddress[] addresses = Dns.GetHostAddresses(hostName);
+                    foreach (var addr in addresses)
+                    {
+                        if (addr.AddressFamily == AddressFamily.InterNetwork)
+                            LogSystemMessage($"  IPv4: {addr}:{_serverPort}");
+                        else if (addr.AddressFamily == AddressFamily.InterNetworkV6 && !addr.IsIPv6LinkLocal)
+                            LogSystemMessage($"  IPv6: [{addr}]:{_serverPort}");
+                    }
+                }
+                catch { /* No es critico */ }
+
                 btnStart.Enabled = false;
                 btnSend.Enabled = true;
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Start Failed: {ex.Message}");
+                string errorMsg = ex.Message;
+
+                // Mensajes de error mas amigables
+                if (errorMsg.Contains("Address already in use") || errorMsg.Contains("Only one usage"))
+                    errorMsg = $"Port {_serverPort} is already in use. Close other applications using this port.";
+                else if (errorMsg.Contains("Access denied") || errorMsg.Contains("Permission"))
+                    errorMsg = $"Access denied for port {_serverPort}. Run as administrator for ports < 1024.";
+                else if (errorMsg.Contains("network") || errorMsg.Contains("socket"))
+                    errorMsg = $"Network error: {ex.Message}\nCheck firewall settings and network configuration.";
+
+                MessageBox.Show(errorMsg, "Server Start Failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                LogSystemMessage($"Start failed: {errorMsg}");
             }
         }
 
