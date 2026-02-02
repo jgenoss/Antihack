@@ -80,9 +80,15 @@
     <ClCompile Include="src\AntiCheatEngine.cpp">
       <Filter>Source Files\Engine</Filter>
     </ClCompile>
+    <ClCompile Include="src\MemoryPatcher.cpp">
+      <Filter>Source Files\Security</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\anticheat_core.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\stdafx.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\internal\common.h">
@@ -107,6 +113,9 @@
       <Filter>Header Files\Internal</Filter>
     </ClInclude>
     <ClInclude Include="include\internal\AntiCheatEngine.h">
+      <Filter>Header Files\Internal</Filter>
+    </ClInclude>
+    <ClInclude Include="include\internal\MemoryPatcher.h">
       <Filter>Header Files\Internal</Filter>
     </ClInclude>
   </ItemGroup>
