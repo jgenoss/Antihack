@@ -262,6 +262,107 @@ AC_API const char* AC_CALL AC_IpcGetLastError(void);
  */
 AC_API const char* AC_CALL AC_GetLastError(void);
 
+// ============================================================================
+// MEMORY PATTERN SCANNING
+// ============================================================================
+
+AC_API bool AC_CALL AC_MemoryScanInit(void);
+AC_API bool AC_CALL AC_AddCheatPattern(const char* name, const unsigned char* pattern,
+                                        const bool* mask, int length);
+AC_API bool AC_CALL AC_ScanProcessMemory(unsigned long processId, char* detectedPattern, int bufferSize);
+AC_API bool AC_CALL AC_ScanCurrentProcess(char* detectedPattern, int bufferSize);
+AC_API bool AC_CALL AC_ScanMemoryRegion(void* address, size_t size,
+                                         char* detectedPattern, int bufferSize);
+AC_API int AC_CALL AC_GetPatternCount(void);
+AC_API void AC_CALL AC_ClearPatterns(void);
+AC_API const char* AC_CALL AC_GetPatternError(void);
+AC_API bool AC_CALL AC_DetectCodeModification(void* codeStart, size_t codeSize, uint32_t originalHash);
+AC_API bool AC_CALL AC_DetectCodeCaves(char* details, int bufferSize);
+
+// ============================================================================
+// FILE PROTECTION
+// ============================================================================
+
+AC_API bool AC_CALL AC_FileProtectionInit(void);
+AC_API void AC_CALL AC_FileProtectionShutdown(void);
+AC_API bool AC_CALL AC_ProtectFile(const wchar_t* filePath);
+AC_API bool AC_CALL AC_ProtectFileA(const char* filePath);
+AC_API bool AC_CALL AC_UnprotectFile(const wchar_t* filePath);
+AC_API bool AC_CALL AC_VerifyFileIntegrity(const wchar_t* filePath);
+AC_API bool AC_CALL AC_VerifyAllFiles(char* failedFile, int bufferSize);
+AC_API bool AC_CALL AC_StartFileMonitoring(void);
+AC_API void AC_CALL AC_StopFileMonitoring(void);
+AC_API int AC_CALL AC_GetProtectedFileCount(void);
+AC_API uint32_t AC_CALL AC_GetFileHash(const wchar_t* filePath);
+AC_API uint32_t AC_CALL AC_GetFileHashA(const char* filePath);
+AC_API const char* AC_CALL AC_GetFileProtectionError(void);
+AC_API int AC_CALL AC_ProtectDirectory(const wchar_t* dirPath, const wchar_t* pattern);
+
+// ============================================================================
+// ENCRYPTION LIBRARY
+// ============================================================================
+
+AC_API bool AC_CALL AC_EncryptionInit(void);
+AC_API bool AC_CALL AC_GenerateSessionKey(void);
+AC_API bool AC_CALL AC_SetSessionKey(const unsigned char* key, int keyLength);
+AC_API bool AC_CALL AC_GetSessionKey(unsigned char* keyBuffer, int bufferSize);
+AC_API bool AC_CALL AC_XorEncrypt(unsigned char* data, int dataLength,
+                                   const unsigned char* key, int keyLength);
+AC_API bool AC_CALL AC_XorDecrypt(unsigned char* data, int dataLength,
+                                   const unsigned char* key, int keyLength);
+AC_API bool AC_CALL AC_RC4Encrypt(unsigned char* data, int dataLength,
+                                   const unsigned char* key, int keyLength);
+AC_API bool AC_CALL AC_RC4Decrypt(unsigned char* data, int dataLength,
+                                   const unsigned char* key, int keyLength);
+AC_API bool AC_CALL AC_EncryptWithSessionKey(unsigned char* data, int dataLength);
+AC_API bool AC_CALL AC_DecryptWithSessionKey(unsigned char* data, int dataLength);
+AC_API bool AC_CALL AC_EncryptString(const char* input, unsigned char* output,
+                                      int* outputLength, const unsigned char* key, int keyLength);
+AC_API bool AC_CALL AC_DecryptString(const unsigned char* input, int inputLength,
+                                      char* output, int outputSize,
+                                      const unsigned char* key, int keyLength);
+AC_API bool AC_CALL AC_GenerateRandom(unsigned char* buffer, int length);
+AC_API uint32_t AC_CALL AC_HashData(const unsigned char* data, int length);
+AC_API uint32_t AC_CALL AC_HashString(const char* str);
+AC_API void AC_CALL AC_ObfuscateData(unsigned char* data, int length);
+AC_API void AC_CALL AC_DeobfuscateData(unsigned char* data, int length);
+AC_API const char* AC_CALL AC_GetEncryptionError(void);
+AC_API void AC_CALL AC_SecureClear(void* buffer, size_t length);
+
+// ============================================================================
+// HOOK DETECTION
+// ============================================================================
+
+AC_API bool AC_CALL AC_HookDetectionInit(void);
+AC_API bool AC_CALL AC_DetectInlineHook(const char* moduleName, const char* functionName,
+                                         char* hookDetails, int bufferSize);
+AC_API bool AC_CALL AC_DetectIATHook(const char* targetModule, const char* importModule,
+                                      const char* functionName, char* hookDetails, int bufferSize);
+AC_API int AC_CALL AC_ScanCommonHooks(char* report, int reportSize);
+AC_API int AC_CALL AC_GetDetectedHookCount(void);
+AC_API void AC_CALL AC_ClearDetectedHooks(void);
+AC_API const char* AC_CALL AC_GetHookError(void);
+AC_API bool AC_CALL AC_DetectVEHHooks(void);
+AC_API bool AC_CALL AC_DetectHardwareBreakpoints(void);
+
+// ============================================================================
+// ANTI-MACRO DETECTION
+// ============================================================================
+
+AC_API bool AC_CALL AC_AntiMacroInit(void);
+AC_API void AC_CALL AC_AntiMacroShutdown(void);
+AC_API bool AC_CALL AC_StartInputMonitoring(void);
+AC_API void AC_CALL AC_StopInputMonitoring(void);
+AC_API bool AC_CALL AC_IsInputMonitoringActive(void);
+AC_API bool AC_CALL AC_DetectAutoClicker(char* details, int bufferSize);
+AC_API bool AC_CALL AC_DetectKeyboardMacro(char* details, int bufferSize);
+AC_API bool AC_CALL AC_DetectInputAutomation(char* details, int bufferSize);
+AC_API void AC_CALL AC_GetClickStats(int* totalClicks, double* avgInterval,
+                                      double* variance, int* suspiciousCount);
+AC_API void AC_CALL AC_ResetMacroStats(void);
+AC_API bool AC_CALL AC_DetectMacroSoftware(char* detectedName, int bufferSize);
+AC_API const char* AC_CALL AC_GetMacroError(void);
+
 #ifdef __cplusplus
 }
 #endif

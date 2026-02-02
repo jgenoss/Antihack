@@ -15,6 +15,12 @@
     <Filter Include="Source Files\Communication">
       <UniqueIdentifier>{C2D3E4F5-A6B7-8901-CDEF-123456789012}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\Detection">
+      <UniqueIdentifier>{D3E4F5A6-B7C8-9012-DEFG-234567890123}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Crypto">
+      <UniqueIdentifier>{E4F5A6B7-C8D9-0123-EFGH-345678901234}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\core.cpp">
@@ -31,6 +37,21 @@
     </ClCompile>
     <ClCompile Include="src\ipc.cpp">
       <Filter>Source Files\Communication</Filter>
+    </ClCompile>
+    <ClCompile Include="src\memory_scan.cpp">
+      <Filter>Source Files\Detection</Filter>
+    </ClCompile>
+    <ClCompile Include="src\file_protection.cpp">
+      <Filter>Source Files\Security</Filter>
+    </ClCompile>
+    <ClCompile Include="src\encryption.cpp">
+      <Filter>Source Files\Crypto</Filter>
+    </ClCompile>
+    <ClCompile Include="src\hooks.cpp">
+      <Filter>Source Files\Detection</Filter>
+    </ClCompile>
+    <ClCompile Include="src\antimacro.cpp">
+      <Filter>Source Files\Detection</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

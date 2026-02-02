@@ -66,6 +66,7 @@
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <BufferSecurityCheck>true</BufferSecurityCheck>
       <ControlFlowGuard>Guard</ControlFlowGuard>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -108,6 +109,11 @@
     <ClCompile Include="src\antidebug.cpp" />
     <ClCompile Include="src\integrity.cpp" />
     <ClCompile Include="src\ipc.cpp" />
+    <ClCompile Include="src\memory_scan.cpp" />
+    <ClCompile Include="src\file_protection.cpp" />
+    <ClCompile Include="src\encryption.cpp" />
+    <ClCompile Include="src\hooks.cpp" />
+    <ClCompile Include="src\antimacro.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\anticheat_core.h" />
