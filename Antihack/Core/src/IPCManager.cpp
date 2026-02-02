@@ -1,9 +1,15 @@
 /**
  * AntiCheatCore - IPC Manager Implementation
  * Thread-safe Named Pipes communication with AntiCheat.exe
+ *
+ * Protocol: JSON over Named Pipes (Byte mode)
+ * Pipe Name: \\.\pipe\AntiCheatPipe
+ * Format: {"action":"TYPE","message":"details"}
  */
 
+#include "stdafx.h"
 #include "../include/internal/IPCManager.h"
+#include <cstdio>
 
 namespace AntiCheat {
 
@@ -20,7 +26,7 @@ IPCManager::IPCManager()
       m_reconnectAttempts(0),
       m_lastHeartbeat(0),
       m_heartbeatInterval(1000),
-      m_pipeName(L"\\\\.\\pipe\\AntiCheatIPC") {
+      m_pipeName(L"\\\\.\\pipe\\AntiCheatPipe") {  // Match C# pipe name
 }
 
 IPCManager::~IPCManager() {
@@ -148,16 +154,13 @@ bool IPCManager::ConnectToPipe() {
         );
 
         if (m_hPipe != INVALID_HANDLE_VALUE) {
-            // Set pipe to message mode
-            DWORD mode = PIPE_READMODE_MESSAGE;
-            if (SetNamedPipeHandleState(m_hPipe, &mode, nullptr, nullptr)) {
-                m_connected = true;
-                m_lastHeartbeat = GetTickCount();
-                return true;
-            } else {
-                CloseHandle(m_hPipe);
-                m_hPipe = INVALID_HANDLE_VALUE;
-            }
+            // Use byte mode to match C# PipeTransmissionMode.Byte
+            DWORD mode = PIPE_READMODE_BYTE;
+            SetNamedPipeHandleState(m_hPipe, &mode, nullptr, nullptr);
+
+            m_connected = true;
+            m_lastHeartbeat = GetTickCount();
+            return true;
         }
 
         DWORD error = GetLastError();
@@ -207,39 +210,84 @@ bool IPCManager::SendMessage(MessageType type, const ByteVector& data) {
     return SendMessage(msg);
 }
 
-bool IPCManager::SendDetection(const DetectionEvent& event) {
-    // Serialize detection event
-    std::string data;
-    data += std::to_string(static_cast<int>(event.type)) + "|";
-    data += std::to_string(static_cast<int>(event.severity)) + "|";
-    data += event.description + "|";
-    data += event.moduleName + "|";
-    data += std::to_string(reinterpret_cast<uintptr_t>(event.address));
+// Helper to escape JSON strings
+static std::string EscapeJson(const std::string& str) {
+    std::string result;
+    result.reserve(str.size() + 16);
+    for (char c : str) {
+        switch (c) {
+            case '"':  result += "\\\""; break;
+            case '\\': result += "\\\\"; break;
+            case '\b': result += "\\b"; break;
+            case '\f': result += "\\f"; break;
+            case '\n': result += "\\n"; break;
+            case '\r': result += "\\r"; break;
+            case '\t': result += "\\t"; break;
+            default:   result += c; break;
+        }
+    }
+    return result;
+}
 
-    MessageType msgType;
+// Helper to create JSON message
+static std::string CreateJsonMessage(const std::string& action, const std::string& message) {
+    return "{\"action\":\"" + action + "\",\"message\":\"" + EscapeJson(message) + "\"}";
+}
+
+bool IPCManager::SendDetection(const DetectionEvent& event) {
+    // Map detection type to C# expected action strings
+    std::string action;
     switch (event.type) {
         case DetectionType::HookDetected:
-            msgType = MessageType::HookDetected;
+        case DetectionType::HookedAPI:
+            action = "HOOK_DETECTED";
             break;
         case DetectionType::MacroDetected:
-            msgType = MessageType::MacroDetected;
+            action = "MACRO_DETECTED";
             break;
         case DetectionType::FileModified:
-            msgType = MessageType::FileModified;
+            action = "FILE_MODIFIED";
             break;
         case DetectionType::DebuggerAttached:
-            msgType = MessageType::DebuggerDetected;
+            action = "DEBUGGER_DETECTED";
+            break;
+        case DetectionType::InjectedDLL:
+            action = "INJECTION_ALERT";
+            break;
+        case DetectionType::ModifiedMemory:
+            action = "MEMORY_MODIFIED";
+            break;
+        case DetectionType::SuspiciousProcess:
+        case DetectionType::SuspiciousModule:
+            action = "SUSPICIOUS_DLL";
+            break;
+        case DetectionType::CheatSignature:
+            action = "CHEAT_DETECTED";
             break;
         default:
-            msgType = MessageType::CheatDetected;
+            action = "THREAT";
             break;
     }
 
-    return SendMessage(msgType, data);
+    // Build detailed message
+    std::string details = event.description;
+    if (!event.moduleName.empty()) {
+        details += " [Module: " + event.moduleName + "]";
+    }
+    if (event.address != nullptr) {
+        char addrBuf[32];
+        sprintf_s(addrBuf, "0x%p", event.address);
+        details += " [Addr: " + std::string(addrBuf) + "]";
+    }
+
+    // Create JSON and send
+    std::string json = CreateJsonMessage(action, details);
+    return SendMessage(MessageType::CheatDetected, json);
 }
 
 bool IPCManager::SendHeartbeat() {
-    return SendMessage(MessageType::Heartbeat);
+    std::string json = CreateJsonMessage("HEARTBEAT", "alive");
+    return SendMessage(MessageType::Heartbeat, json);
 }
 
 bool IPCManager::SendRaw(const Message& msg) {
@@ -247,25 +295,35 @@ bool IPCManager::SendRaw(const Message& msg) {
         return false;
     }
 
-    // Build packet: [type:4][size:4][data:N]
-    ByteVector packet;
-    packet.resize(8 + msg.data.size());
+    // Send JSON string directly (C# expects raw JSON, not binary header)
+    // If data is empty, send a minimal JSON based on message type
+    const uint8_t* dataPtr;
+    DWORD dataSize;
 
-    *reinterpret_cast<uint32_t*>(&packet[0]) = static_cast<uint32_t>(msg.type);
-    *reinterpret_cast<uint32_t*>(&packet[4]) = msg.dataSize;
+    if (msg.data.empty()) {
+        // Create minimal JSON for message types without data
+        static const char* heartbeatJson = "{\"action\":\"HEARTBEAT\",\"message\":\"alive\"}";
+        static const char* statusJson = "{\"action\":\"STATUS\",\"message\":\"ok\"}";
 
-    if (!msg.data.empty()) {
-        memcpy(&packet[8], msg.data.data(), msg.data.size());
+        if (msg.type == MessageType::Heartbeat) {
+            dataPtr = reinterpret_cast<const uint8_t*>(heartbeatJson);
+            dataSize = static_cast<DWORD>(strlen(heartbeatJson));
+        } else {
+            dataPtr = reinterpret_cast<const uint8_t*>(statusJson);
+            dataSize = static_cast<DWORD>(strlen(statusJson));
+        }
+    } else {
+        dataPtr = msg.data.data();
+        dataSize = static_cast<DWORD>(msg.data.size());
     }
 
     DWORD bytesWritten;
-    if (!WriteFile(m_hPipe, packet.data(), static_cast<DWORD>(packet.size()),
-                   &bytesWritten, nullptr)) {
-        m_lastError = "Write failed";
+    if (!WriteFile(m_hPipe, dataPtr, dataSize, &bytesWritten, nullptr)) {
+        m_lastError = "Write failed: " + std::to_string(GetLastError());
         return false;
     }
 
-    return bytesWritten == packet.size();
+    return bytesWritten == dataSize;
 }
 
 // ============================================================================
@@ -297,30 +355,38 @@ bool IPCManager::ReceiveRaw(Message& msg) {
         return false;
     }
 
-    // Read header
-    uint8_t header[8];
+    // Read JSON string from pipe (C# sends raw JSON)
+    uint8_t buffer[PIPE_BUFFER_SIZE];
     DWORD bytesRead;
 
-    if (!ReadFile(m_hPipe, header, 8, &bytesRead, nullptr) || bytesRead != 8) {
+    if (!ReadFile(m_hPipe, buffer, PIPE_BUFFER_SIZE - 1, &bytesRead, nullptr)) {
         return false;
     }
 
-    msg.type = static_cast<MessageType>(*reinterpret_cast<uint32_t*>(&header[0]));
-    msg.dataSize = *reinterpret_cast<uint32_t*>(&header[4]);
+    if (bytesRead == 0) {
+        return false;
+    }
+
+    // Null-terminate and parse
+    buffer[bytesRead] = '\0';
+    std::string json(reinterpret_cast<char*>(buffer), bytesRead);
+
     msg.timestamp = GetTickCount();
+    msg.data.assign(buffer, buffer + bytesRead);
+    msg.dataSize = bytesRead;
 
-    // Read data if any
-    if (msg.dataSize > 0) {
-        if (msg.dataSize > PIPE_BUFFER_SIZE) {
-            m_lastError = "Message too large";
-            return false;
-        }
-
-        msg.data.resize(msg.dataSize);
-        if (!ReadFile(m_hPipe, msg.data.data(), msg.dataSize, &bytesRead, nullptr) ||
-            bytesRead != msg.dataSize) {
-            return false;
-        }
+    // Parse command from JSON to determine message type
+    // Expected format: {"command":"SCAN"} or {"command":"CHECK_INTEGRITY"}
+    if (json.find("\"SCAN\"") != std::string::npos) {
+        msg.type = MessageType::RequestScan;
+    } else if (json.find("\"CHECK_INTEGRITY\"") != std::string::npos) {
+        msg.type = MessageType::RequestStatus;
+    } else if (json.find("\"SHUTDOWN\"") != std::string::npos) {
+        msg.type = MessageType::Shutdown;
+    } else if (json.find("\"UPDATE_CONFIG\"") != std::string::npos) {
+        msg.type = MessageType::UpdateConfig;
+    } else {
+        msg.type = MessageType::Status;
     }
 
     return true;

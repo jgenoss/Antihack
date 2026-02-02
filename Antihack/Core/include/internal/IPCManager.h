@@ -107,7 +107,7 @@ public:
     ~IPCManager();
 
     // Connection management
-    bool Initialize(const std::wstring& pipeName = L"\\\\.\\pipe\\AntiCheatIPC");
+    bool Initialize(const std::wstring& pipeName = L"\\\\.\\pipe\\AntiCheatPipe");
     void Shutdown();
     bool Connect();
     void Disconnect();
