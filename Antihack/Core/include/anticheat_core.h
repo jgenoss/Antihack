@@ -168,12 +168,89 @@ AC_API bool AC_CALL AC_IsApiHooked(const char* module_name, const char* function
 // ============================================================================
 
 typedef void (AC_CALL *AC_DetectionCallback)(const char* detection_type, const char* details);
+typedef void (AC_CALL *AC_IpcMessageCallback)(const char* message);
 
 /**
  * Set callback for detection events
  * @param callback Function to call when detection occurs
  */
 AC_API void AC_CALL AC_SetDetectionCallback(AC_DetectionCallback callback);
+
+// ============================================================================
+// IPC - INTER-PROCESS COMMUNICATION
+// ============================================================================
+
+/**
+ * Initialize IPC communication with AntiCheat process
+ * @return true if connected successfully
+ */
+AC_API bool AC_CALL AC_IpcInitialize(void);
+
+/**
+ * Shutdown IPC communication
+ */
+AC_API void AC_CALL AC_IpcShutdown(void);
+
+/**
+ * Check if IPC is connected
+ * @return true if connected
+ */
+AC_API bool AC_CALL AC_IpcIsConnected(void);
+
+/**
+ * Send a raw message to AntiCheat
+ * @param message JSON formatted message
+ * @return true if sent successfully
+ */
+AC_API bool AC_CALL AC_IpcSendMessage(const char* message);
+
+/**
+ * Report a detection to AntiCheat
+ * @param detectionType Type of detection (e.g., "DEBUGGER", "INJECTION")
+ * @param details Additional details
+ * @return true if sent successfully
+ */
+AC_API bool AC_CALL AC_IpcReportDetection(const char* detectionType, const char* details);
+
+/**
+ * Report DLL injection attempt
+ * @param dllPath Path of the injected DLL
+ * @return true if sent successfully
+ */
+AC_API bool AC_CALL AC_IpcReportDllInjection(const char* dllPath);
+
+/**
+ * Report suspicious DLL loaded
+ * @param dllName Name of the suspicious DLL
+ * @return true if sent successfully
+ */
+AC_API bool AC_CALL AC_IpcReportSuspiciousDll(const char* dllName);
+
+/**
+ * Report debugger detected
+ * @param debuggerInfo Information about the debugger
+ * @return true if sent successfully
+ */
+AC_API bool AC_CALL AC_IpcReportDebugger(const char* debuggerInfo);
+
+/**
+ * Report memory modification
+ * @param details Details about the modification
+ * @return true if sent successfully
+ */
+AC_API bool AC_CALL AC_IpcReportMemoryModification(const char* details);
+
+/**
+ * Set callback for messages received from AntiCheat
+ * @param callback Function to call when message received
+ */
+AC_API void AC_CALL AC_IpcSetMessageCallback(AC_IpcMessageCallback callback);
+
+/**
+ * Get last IPC error message
+ * @return Error message string
+ */
+AC_API const char* AC_CALL AC_IpcGetLastError(void);
 
 // ============================================================================
 // UTILITY
