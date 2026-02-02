@@ -30,6 +30,12 @@ namespace AntiCheat.Modules.Security
     public delegate void DetectionCallback(string detectionType, string details);
 
     /// <summary>
+    /// Callback delegate for IPC messages received from AntiCheat
+    /// </summary>
+    [UnmanagedFunctionPointer(CallingConvention.StdCall, CharSet = CharSet.Ansi)]
+    public delegate void IpcMessageCallback(string message);
+
+    /// <summary>
     /// P/Invoke wrapper for AntiCheatCore native DLL
     /// </summary>
     public static class NativeInterop
@@ -128,6 +134,53 @@ namespace AntiCheat.Modules.Security
 
         [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
         private static extern IntPtr AC_GetLastError();
+
+        #endregion
+
+        #region IPC - Inter-Process Communication
+
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool AC_IpcInitialize();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
+        private static extern void AC_IpcShutdown();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool AC_IpcIsConnected();
+
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool AC_IpcSendMessage([MarshalAs(UnmanagedType.LPStr)] string message);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool AC_IpcReportDetection(
+            [MarshalAs(UnmanagedType.LPStr)] string detectionType,
+            [MarshalAs(UnmanagedType.LPStr)] string details);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool AC_IpcReportDllInjection([MarshalAs(UnmanagedType.LPStr)] string dllPath);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool AC_IpcReportSuspiciousDll([MarshalAs(UnmanagedType.LPStr)] string dllName);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool AC_IpcReportDebugger([MarshalAs(UnmanagedType.LPStr)] string debuggerInfo);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
+        [return: MarshalAs(UnmanagedType.I1)]
+        private static extern bool AC_IpcReportMemoryModification([MarshalAs(UnmanagedType.LPStr)] string details);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
+        private static extern void AC_IpcSetMessageCallback(IpcMessageCallback callback);
+
+        [DllImport(DllName, CallingConvention = CallingConvention.StdCall)]
+        private static extern IntPtr AC_IpcGetLastError();
 
         #endregion
 
@@ -405,6 +458,177 @@ namespace AntiCheat.Modules.Security
             catch
             {
                 return "Unknown error";
+            }
+        }
+
+        // ====================================================================
+        // IPC Managed Wrappers (for DLL injected in game process)
+        // ====================================================================
+
+        private static IpcMessageCallback _ipcMessageCallback;
+
+        /// <summary>
+        /// Initialize IPC connection to AntiCheat process
+        /// Call this from the DLL when injected into game
+        /// </summary>
+        public static bool IpcInitialize()
+        {
+            try
+            {
+                return AC_IpcInitialize();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Shutdown IPC connection
+        /// </summary>
+        public static void IpcShutdown()
+        {
+            try
+            {
+                AC_IpcShutdown();
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Check if IPC is connected to AntiCheat
+        /// </summary>
+        public static bool IpcIsConnected()
+        {
+            try
+            {
+                return AC_IpcIsConnected();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Send raw JSON message to AntiCheat
+        /// </summary>
+        public static bool IpcSendMessage(string message)
+        {
+            try
+            {
+                return AC_IpcSendMessage(message);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Report a detection to AntiCheat
+        /// </summary>
+        public static bool IpcReportDetection(string detectionType, string details)
+        {
+            try
+            {
+                return AC_IpcReportDetection(detectionType, details ?? "");
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Report DLL injection attempt
+        /// </summary>
+        public static bool IpcReportDllInjection(string dllPath)
+        {
+            try
+            {
+                return AC_IpcReportDllInjection(dllPath);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Report suspicious DLL loaded
+        /// </summary>
+        public static bool IpcReportSuspiciousDll(string dllName)
+        {
+            try
+            {
+                return AC_IpcReportSuspiciousDll(dllName);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Report debugger detected
+        /// </summary>
+        public static bool IpcReportDebugger(string debuggerInfo)
+        {
+            try
+            {
+                return AC_IpcReportDebugger(debuggerInfo);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Report memory modification detected
+        /// </summary>
+        public static bool IpcReportMemoryModification(string details)
+        {
+            try
+            {
+                return AC_IpcReportMemoryModification(details);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Set callback for messages received from AntiCheat
+        /// </summary>
+        public static void IpcSetMessageCallback(Action<string> callback)
+        {
+            try
+            {
+                if (callback != null)
+                {
+                    _ipcMessageCallback = (msg) => callback(msg);
+                    AC_IpcSetMessageCallback(_ipcMessageCallback);
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>
+        /// Get last IPC error message
+        /// </summary>
+        public static string IpcGetLastError()
+        {
+            try
+            {
+                IntPtr ptr = AC_IpcGetLastError();
+                return Marshal.PtrToStringAnsi(ptr) ?? "Unknown IPC error";
+            }
+            catch
+            {
+                return "Unknown IPC error";
             }
         }
     }
