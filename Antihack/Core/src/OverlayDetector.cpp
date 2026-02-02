@@ -1,6 +1,9 @@
 /**
  * AntiCheatCore - Overlay Detector Implementation
  * Detects external overlay cheats (ESP, wallhacks via transparent windows)
+ *
+ * Thread Safety: Uses IMonitorModule base class for safe monitoring.
+ * All callbacks are invoked outside of locks to prevent deadlocks.
  */
 
 #include "stdafx.h"
@@ -13,11 +16,10 @@ namespace AntiCheat {
 // ============================================================================
 
 OverlayDetector::OverlayDetector()
-    : m_gameWindow(nullptr),
-      m_gameProcessId(0),
-      m_monitorThread(nullptr),
-      m_monitorInterval(500) {
-    m_gameRect = { 0, 0, 0, 0 };
+    : TypedMonitorModule("OverlayDetector", 500)  // Default 500ms interval
+    , m_gameWindow(NULL)
+    , m_gameProcessId(0) {
+    ZeroMemory(&m_gameRect, sizeof(m_gameRect));
 }
 
 OverlayDetector::~OverlayDetector() {
@@ -29,7 +31,12 @@ OverlayDetector::~OverlayDetector() {
 // ============================================================================
 
 bool OverlayDetector::Initialize() {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    // Initialize base class first
+    if (!IMonitorModule::Initialize()) {
+        return false;
+    }
+
+    std::lock_guard<std::mutex> lock(m_dataMutex);
 
     // Add default whitelisted system windows
     m_whitelistedClasses.insert(L"Shell_TrayWnd");           // Taskbar
@@ -49,12 +56,107 @@ bool OverlayDetector::Initialize() {
 }
 
 void OverlayDetector::Shutdown() {
-    StopMonitoring();
+    // Stop monitoring first (base class handles thread cleanup)
+    IMonitorModule::Shutdown();
 
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::lock_guard<std::mutex> lock(m_dataMutex);
     m_signatures.clear();
     m_overlayWindows.clear();
-    m_gameWindow = nullptr;
+    m_gameWindow = NULL;
+}
+
+// ============================================================================
+// MONITOR CYCLE (called by base class thread)
+// ============================================================================
+
+void OverlayDetector::DoMonitorCycle() {
+    HWND gameWindow = NULL;
+    RECT gameRect;
+
+    // Atomically copy game window data
+    {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        gameWindow = m_gameWindow;
+        gameRect = m_gameRect;
+    }
+
+    // Update game window rect (outside lock - Windows API call)
+    if (gameWindow && IsWindow(gameWindow)) {
+        RECT newRect;
+        if (GetWindowRect(gameWindow, &newRect)) {
+            std::lock_guard<std::mutex> lock(m_dataMutex);
+            m_gameRect = newRect;
+            gameRect = newRect;
+        }
+    } else {
+        // Game window closed or invalid
+        return;
+    }
+
+    // Scan for overlays using context struct (no shared state during enum)
+    EnumContext ctx;
+    ctx.detector = this;
+    ctx.gameRect = gameRect;
+
+    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&ctx));
+
+    // Process results
+    std::vector<DetectionResult> detections;
+    std::vector<OverlaySignature> signatures;
+
+    {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        m_overlayWindows = std::move(ctx.windows);
+        signatures = m_signatures;  // Copy signatures for processing
+    }
+
+    // Analyze outside lock
+    for (auto& window : m_overlayWindows) {
+        DetectionResult result;
+        result.detected = false;
+        result.window = window;
+
+        // Check against signatures
+        for (const auto& sig : signatures) {
+            if (MatchesSignature(window, sig)) {
+                result.detected = true;
+                result.reason = sig.description;
+                result.severity = sig.severity;
+                window.isSuspicious = true;
+                window.suspicionReason = sig.description;
+                break;
+            }
+        }
+
+        // Check for suspicious patterns if no signature match
+        if (!result.detected && IsSuspiciousOverlay(window)) {
+            result.detected = true;
+            result.reason = window.suspicionReason;
+            result.severity = Severity::Warning;
+        }
+
+        if (result.detected) {
+            detections.push_back(result);
+
+            // Queue event for dispatch (will be called outside of any lock)
+            DetectionEvent event;
+            event.type = DetectionType::SuspiciousProcess;
+            event.severity = result.severity;
+            event.description = result.reason;
+            event.moduleName = WStringToString(window.processName);
+            event.address = reinterpret_cast<void*>(window.hwnd);
+            event.timestamp = GetTickCount();
+            QueueEvent(event);
+        }
+    }
+
+    // Queue typed events for overlay callback
+    for (const auto& det : detections) {
+        QueueTypedEvent(det);
+    }
+
+    // Dispatch typed events outside of lock
+    DispatchTypedEvents();
 }
 
 // ============================================================================
@@ -67,7 +169,7 @@ bool OverlayDetector::SetGameWindow(HWND hwnd) {
         return false;
     }
 
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::lock_guard<std::mutex> lock(m_dataMutex);
 
     m_gameWindow = hwnd;
     GetWindowRect(hwnd, &m_gameRect);
@@ -108,7 +210,7 @@ bool OverlayDetector::SetGameWindowByProcess(DWORD processId) {
     struct EnumData {
         DWORD processId;
         HWND result;
-    } data = { processId, nullptr };
+    } data = { processId, NULL };
 
     EnumWindows([](HWND hwnd, LPARAM lParam) -> BOOL {
         EnumData* data = reinterpret_cast<EnumData*>(lParam);
@@ -136,7 +238,7 @@ bool OverlayDetector::SetGameWindowByProcess(DWORD processId) {
 // ============================================================================
 
 void OverlayDetector::AddSignature(const OverlaySignature& sig) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::lock_guard<std::mutex> lock(m_dataMutex);
     m_signatures.push_back(sig);
 }
 
@@ -173,9 +275,9 @@ void OverlayDetector::LoadDefaultSignatures() {
     AddCheatSignature(L"", L"UnityWndClass", L"Overlay", "Unity-based overlay");
 
     // Suspicious tools (could be legitimate but often used for cheats)
-    AddSuspiciousSignature(L"obs64.exe", L"");      // OBS (legitimate but can hide overlays)
+    AddSuspiciousSignature(L"obs64.exe", L"");
     AddSuspiciousSignature(L"obs32.exe", L"");
-    AddSuspiciousSignature(L"", L"MicrosoftEdgeWebView2");  // WebView overlays
+    AddSuspiciousSignature(L"", L"MicrosoftEdgeWebView2");
 
     // ESP/Wallhack common patterns
     AddCheatSignature(L"", L"", L"ESP", "ESP overlay detected");
@@ -191,7 +293,7 @@ void OverlayDetector::LoadDefaultSignatures() {
 }
 
 void OverlayDetector::ClearSignatures() {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::lock_guard<std::mutex> lock(m_dataMutex);
     m_signatures.clear();
 }
 
@@ -200,24 +302,25 @@ void OverlayDetector::ClearSignatures() {
 // ============================================================================
 
 void OverlayDetector::AddWhitelistedProcess(const std::wstring& processName) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::lock_guard<std::mutex> lock(m_dataMutex);
     std::wstring lower = processName;
     std::transform(lower.begin(), lower.end(), lower.begin(), ::towlower);
     m_whitelistedProcesses.insert(lower);
 }
 
 void OverlayDetector::AddWhitelistedClass(const std::wstring& className) {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::lock_guard<std::mutex> lock(m_dataMutex);
     m_whitelistedClasses.insert(className);
 }
 
 void OverlayDetector::ClearWhitelist() {
-    std::lock_guard<std::mutex> lock(m_mutex);
+    std::lock_guard<std::mutex> lock(m_dataMutex);
     m_whitelistedProcesses.clear();
     m_whitelistedClasses.clear();
 }
 
 bool OverlayDetector::IsWhitelisted(const WindowInfo& info) {
+    // Note: Caller should hold lock if needed
     std::wstring lowerProcess = info.processName;
     std::transform(lowerProcess.begin(), lowerProcess.end(), lowerProcess.begin(), ::towlower);
 
@@ -231,125 +334,84 @@ bool OverlayDetector::IsWhitelisted(const WindowInfo& info) {
 }
 
 // ============================================================================
-// MONITORING
-// ============================================================================
-
-bool OverlayDetector::StartMonitoring(DWORD intervalMs) {
-    if (m_monitoring) return true;
-
-    if (!m_gameWindow) {
-        m_lastError = "Game window not set";
-        return false;
-    }
-
-    m_monitorInterval = intervalMs;
-    m_monitoring = true;
-
-    m_monitorThread = CreateThread(nullptr, 0, MonitorThreadProc, this, 0, nullptr);
-    if (!m_monitorThread) {
-        m_monitoring = false;
-        m_lastError = "Failed to create monitor thread";
-        return false;
-    }
-
-    return true;
-}
-
-void OverlayDetector::StopMonitoring() {
-    if (!m_monitoring) return;
-
-    m_monitoring = false;
-
-    if (m_monitorThread) {
-        WaitForSingleObject(m_monitorThread, 5000);
-        CloseHandle(m_monitorThread);
-        m_monitorThread = nullptr;
-    }
-}
-
-DWORD WINAPI OverlayDetector::MonitorThreadProc(LPVOID param) {
-    OverlayDetector* self = static_cast<OverlayDetector*>(param);
-    self->MonitorLoop();
-    return 0;
-}
-
-void OverlayDetector::MonitorLoop() {
-    while (m_monitoring) {
-        // Update game window rect
-        if (m_gameWindow && IsWindow(m_gameWindow)) {
-            GetWindowRect(m_gameWindow, &m_gameRect);
-        }
-
-        // Scan for overlays
-        auto results = DetectCheatOverlays();
-
-        for (const auto& result : results) {
-            if (result.detected && m_detectionCallback) {
-                m_detectionCallback(result);
-            }
-        }
-
-        Sleep(m_monitorInterval);
-    }
-}
-
-// ============================================================================
-// SCANNING
+// SCANNING (uses context for thread safety)
 // ============================================================================
 
 BOOL CALLBACK OverlayDetector::EnumWindowsProc(HWND hwnd, LPARAM lParam) {
-    OverlayDetector* self = reinterpret_cast<OverlayDetector*>(lParam);
-    self->ProcessWindow(hwnd);
+    EnumContext* ctx = reinterpret_cast<EnumContext*>(lParam);
+    ctx->detector->ProcessWindow(hwnd, *ctx);
     return TRUE;
 }
 
-void OverlayDetector::ProcessWindow(HWND hwnd) {
+void OverlayDetector::ProcessWindow(HWND hwnd, EnumContext& ctx) {
+    HWND gameWindow;
+    {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        gameWindow = m_gameWindow;
+    }
+
     // Skip our own game window
-    if (hwnd == m_gameWindow) return;
+    if (hwnd == gameWindow) return;
 
     // Must be visible
     if (!IsWindowVisible(hwnd)) return;
 
     WindowInfo info = GetWindowInfo(hwnd);
 
-    // Check if over game
-    if (!IsWindowOverGame(hwnd)) return;
+    // Check if over game (using context's cached gameRect)
+    if (!IsWindowOverGame(hwnd, ctx.gameRect)) return;
 
     // Check if it's an overlay-type window
     if (!IsOverlayWindow(hwnd)) return;
 
     // Check whitelist
-    if (IsWhitelisted(info)) return;
+    {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        if (IsWhitelisted(info)) return;
+    }
 
-    // Add to detected list
-    std::lock_guard<std::mutex> lock(m_mutex);
-    m_overlayWindows.push_back(info);
+    // Add to context's list (not shared state)
+    ctx.windows.push_back(info);
 }
 
 std::vector<OverlayDetector::WindowInfo> OverlayDetector::ScanForOverlays() {
+    RECT gameRect;
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_overlayWindows.clear();
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        gameRect = m_gameRect;
     }
 
-    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(this));
+    EnumContext ctx;
+    ctx.detector = this;
+    ctx.gameRect = gameRect;
 
-    std::lock_guard<std::mutex> lock(m_mutex);
-    return m_overlayWindows;
+    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&ctx));
+
+    {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        m_overlayWindows = ctx.windows;
+    }
+
+    return ctx.windows;
 }
 
 std::vector<OverlayDetector::DetectionResult> OverlayDetector::DetectCheatOverlays() {
     std::vector<DetectionResult> results;
+    std::vector<OverlaySignature> signatures;
 
     auto overlays = ScanForOverlays();
+
+    {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        signatures = m_signatures;
+    }
 
     for (auto& window : overlays) {
         DetectionResult result;
         result.detected = false;
         result.window = window;
 
-        // Check against signatures
-        for (const auto& sig : m_signatures) {
+        for (const auto& sig : signatures) {
             if (MatchesSignature(window, sig)) {
                 result.detected = true;
                 result.reason = sig.description;
@@ -360,7 +422,6 @@ std::vector<OverlayDetector::DetectionResult> OverlayDetector::DetectCheatOverla
             }
         }
 
-        // Even without signature match, check for suspicious patterns
         if (!result.detected && IsSuspiciousOverlay(window)) {
             result.detected = true;
             result.reason = window.suspicionReason;
@@ -369,10 +430,6 @@ std::vector<OverlayDetector::DetectionResult> OverlayDetector::DetectCheatOverla
 
         if (result.detected) {
             results.push_back(result);
-
-            if (m_onOverlayFound) {
-                m_onOverlayFound(result);
-            }
         }
     }
 
@@ -389,34 +446,28 @@ bool OverlayDetector::HasSuspiciousOverlays() {
 // ============================================================================
 
 OverlayDetector::WindowInfo OverlayDetector::GetWindowInfo(HWND hwnd) {
-    WindowInfo info = {};
+    WindowInfo info;
     info.hwnd = hwnd;
 
-    // Get class name
     wchar_t className[256] = { 0 };
     GetClassNameW(hwnd, className, 256);
     info.className = className;
 
-    // Get window title
     wchar_t title[256] = { 0 };
     GetWindowTextW(hwnd, title, 256);
     info.windowTitle = title;
 
-    // Get process info
     info.processId = GetProcessIdFromWindow(hwnd);
     info.processName = GetProcessNameFromWindow(hwnd);
 
-    // Get rect
     GetWindowRect(hwnd, &info.rect);
 
-    // Check window styles
     LONG exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
     info.isLayered = (exStyle & WS_EX_LAYERED) != 0;
     info.isTopmost = (exStyle & WS_EX_TOPMOST) != 0;
     info.isTransparent = (exStyle & WS_EX_TRANSPARENT) != 0;
     info.isClickThrough = info.isTransparent;
 
-    // Get opacity
     info.opacity = 255;
     if (info.isLayered) {
         BYTE alpha;
@@ -429,10 +480,7 @@ OverlayDetector::WindowInfo OverlayDetector::GetWindowInfo(HWND hwnd) {
         }
     }
 
-    // Check fullscreen
     info.isFullscreen = IsWindowFullscreen(hwnd);
-
-    info.isSuspicious = false;
 
     return info;
 }
@@ -440,15 +488,18 @@ OverlayDetector::WindowInfo OverlayDetector::GetWindowInfo(HWND hwnd) {
 bool OverlayDetector::IsOverlayWindow(HWND hwnd) {
     LONG exStyle = GetWindowLongW(hwnd, GWL_EXSTYLE);
 
-    // Overlay windows are typically layered, topmost, or transparent
     if (exStyle & WS_EX_LAYERED) return true;
     if (exStyle & WS_EX_TOPMOST) return true;
     if (exStyle & WS_EX_TRANSPARENT) return true;
 
-    // Check if it's a borderless window over game
     LONG style = GetWindowLongW(hwnd, GWL_STYLE);
     if (!(style & WS_BORDER) && !(style & WS_CAPTION)) {
-        if (IsWindowOverGame(hwnd)) {
+        RECT gameRect;
+        {
+            std::lock_guard<std::mutex> lock(m_dataMutex);
+            gameRect = m_gameRect;
+        }
+        if (IsWindowOverGame(hwnd, gameRect)) {
             return true;
         }
     }
@@ -457,38 +508,36 @@ bool OverlayDetector::IsOverlayWindow(HWND hwnd) {
 }
 
 bool OverlayDetector::IsSuspiciousOverlay(const WindowInfo& info) {
-    // Transparent + over game = suspicious
-    if (info.isTransparent && IsWindowOverGame(info.hwnd)) {
+    RECT gameRect;
+    {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        gameRect = m_gameRect;
+    }
+
+    if (info.isTransparent && IsWindowOverGame(info.hwnd, gameRect)) {
         const_cast<WindowInfo&>(info).suspicionReason = "Transparent window over game";
         return true;
     }
 
-    // Low opacity layered window over game
-    if (info.isLayered && info.opacity < 255 && IsWindowOverGame(info.hwnd)) {
+    if (info.isLayered && info.opacity < 255 && IsWindowOverGame(info.hwnd, gameRect)) {
         const_cast<WindowInfo&>(info).suspicionReason = "Semi-transparent overlay";
         return true;
     }
 
-    // Click-through window over game
-    if (info.isClickThrough && IsWindowOverGame(info.hwnd)) {
+    if (info.isClickThrough && IsWindowOverGame(info.hwnd, gameRect)) {
         const_cast<WindowInfo&>(info).suspicionReason = "Click-through overlay";
         return true;
     }
 
-    // Topmost borderless window matching game size
     if (info.isTopmost) {
-        RECT gameRect;
-        if (GetWindowRect(m_gameWindow, &gameRect)) {
-            if (info.rect.left == gameRect.left && info.rect.top == gameRect.top &&
-                info.rect.right == gameRect.right && info.rect.bottom == gameRect.bottom) {
-                const_cast<WindowInfo&>(info).suspicionReason = "Topmost window matching game size";
-                return true;
-            }
+        if (info.rect.left == gameRect.left && info.rect.top == gameRect.top &&
+            info.rect.right == gameRect.right && info.rect.bottom == gameRect.bottom) {
+            const_cast<WindowInfo&>(info).suspicionReason = "Topmost window matching game size";
+            return true;
         }
     }
 
-    // Unknown process with overlay over game
-    if (info.processName.empty() && IsWindowOverGame(info.hwnd)) {
+    if (info.processName.empty() && IsWindowOverGame(info.hwnd, gameRect)) {
         const_cast<WindowInfo&>(info).suspicionReason = "Unknown process overlay";
         return true;
     }
@@ -496,14 +545,10 @@ bool OverlayDetector::IsSuspiciousOverlay(const WindowInfo& info) {
     return false;
 }
 
-bool OverlayDetector::IsWindowOverGame(HWND hwnd) {
-    if (!m_gameWindow) return false;
-
-    RECT windowRect, gameRect;
+bool OverlayDetector::IsWindowOverGame(HWND hwnd, const RECT& gameRect) {
+    RECT windowRect;
     if (!GetWindowRect(hwnd, &windowRect)) return false;
-    if (!GetWindowRect(m_gameWindow, &gameRect)) return false;
 
-    // Check for intersection
     RECT intersection;
     return IntersectRect(&intersection, &windowRect, &gameRect) != 0;
 }
@@ -542,7 +587,6 @@ bool OverlayDetector::IsWindowFullscreen(HWND hwnd) {
 }
 
 bool OverlayDetector::MatchesSignature(const WindowInfo& info, const OverlaySignature& sig) {
-    // Check process name
     if (!sig.processName.empty()) {
         std::wstring lowerProcess = info.processName;
         std::wstring lowerSig = sig.processName;
@@ -554,7 +598,6 @@ bool OverlayDetector::MatchesSignature(const WindowInfo& info, const OverlaySign
         }
     }
 
-    // Check class name
     if (!sig.className.empty()) {
         std::wstring lowerClass = info.className;
         std::wstring lowerSig = sig.className;
@@ -566,7 +609,6 @@ bool OverlayDetector::MatchesSignature(const WindowInfo& info, const OverlaySign
         }
     }
 
-    // Check window title
     if (!sig.windowTitle.empty()) {
         std::wstring lowerTitle = info.windowTitle;
         std::wstring lowerSig = sig.windowTitle;
@@ -578,7 +620,6 @@ bool OverlayDetector::MatchesSignature(const WindowInfo& info, const OverlaySign
         }
     }
 
-    // At least one field must have been checked
     return !sig.processName.empty() || !sig.className.empty() || !sig.windowTitle.empty();
 }
 
@@ -620,8 +661,6 @@ DWORD OverlayDetector::GetProcessIdFromWindow(HWND hwnd) {
 // ============================================================================
 
 bool OverlayDetector::CheckD3DHooks() {
-    // This would require checking D3D vtable for hooks
-    // Placeholder - would need more complex implementation
     return false;
 }
 
@@ -630,7 +669,6 @@ bool OverlayDetector::CheckDWMComposition() {
     HRESULT hr = DwmIsCompositionEnabled(&enabled);
 
     if (SUCCEEDED(hr) && !enabled) {
-        // DWM composition disabled - could indicate tampering
         return true;
     }
 

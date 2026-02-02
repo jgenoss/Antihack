@@ -121,6 +121,7 @@
     <ClInclude Include="include\anticheat_core.h" />
     <ClInclude Include="include\stdafx.h" />
     <ClInclude Include="include\internal\common.h" />
+    <ClInclude Include="include\internal\IMonitorModule.h" />
     <ClInclude Include="include\internal\FileProtection.h" />
     <ClInclude Include="include\internal\EncryptionLib.h" />
     <ClInclude Include="include\internal\MacroDetector.h" />

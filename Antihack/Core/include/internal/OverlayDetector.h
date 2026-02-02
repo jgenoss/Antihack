@@ -8,14 +8,18 @@
 #ifndef AC_OVERLAY_DETECTOR_H
 #define AC_OVERLAY_DETECTOR_H
 
-#include "common.h"
+#include "IMonitorModule.h"
 #include <dwmapi.h>
 
 #pragma comment(lib, "dwmapi.lib")
 
 namespace AntiCheat {
 
-class OverlayDetector {
+/**
+ * Detects overlay windows that may be used for ESP/wallhacks.
+ * Inherits from IMonitorModule for thread-safe monitoring.
+ */
+class OverlayDetector : public TypedMonitorModule<struct OverlayDetector::DetectionResult> {
 public:
     // Window information
     struct WindowInfo {
@@ -33,6 +37,19 @@ public:
         bool isFullscreen;
         bool isSuspicious;
         std::string suspicionReason;
+
+        WindowInfo()
+            : hwnd(NULL)
+            , processId(0)
+            , opacity(255)
+            , isLayered(false)
+            , isTopmost(false)
+            , isTransparent(false)
+            , isClickThrough(false)
+            , isFullscreen(false)
+            , isSuspicious(false) {
+            ZeroMemory(&rect, sizeof(rect));
+        }
     };
 
     // Known overlay programs
@@ -51,12 +68,14 @@ public:
         WindowInfo window;
         std::string reason;
         Severity severity;
+
+        DetectionResult() : detected(false), severity(Severity::Info) {}
     };
 
-    using DetectionCallback = std::function<void(const DetectionResult&)>;
+    using OverlayCallback = std::function<void(const DetectionResult&)>;
 
 private:
-    // Target game window
+    // Target game window (protected by m_dataMutex from base class)
     HWND m_gameWindow;
     RECT m_gameRect;
     std::wstring m_gameClassName;
@@ -68,31 +87,25 @@ private:
     std::set<std::wstring> m_whitelistedProcesses;
     std::set<std::wstring> m_whitelistedClasses;
 
-    // Detected windows
+    // Detected windows (protected by m_dataMutex)
     std::vector<WindowInfo> m_overlayWindows;
 
-    // Monitoring
-    std::atomic<bool> m_monitoring{false};
-    HANDLE m_monitorThread;
-    DWORD m_monitorInterval;
+    // Additional callback for overlay-specific events
+    OverlayCallback m_overlayCallback;
 
-    // Callbacks
-    DetectionCallback m_detectionCallback;
-    DetectionCallback m_onOverlayFound;
-
-    // Sync
-    std::mutex m_mutex;
-    std::string m_lastError;
+    // EnumWindows context
+    struct EnumContext {
+        OverlayDetector* detector;
+        RECT gameRect;
+        std::vector<WindowInfo> windows;
+    };
 
     // Internal methods
-    static DWORD WINAPI MonitorThreadProc(LPVOID param);
-    void MonitorLoop();
-
     static BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam);
-    void ProcessWindow(HWND hwnd);
+    void ProcessWindow(HWND hwnd, EnumContext& ctx);
 
-    // Analysis
-    bool IsWindowOverGame(HWND hwnd);
+    // Analysis (all thread-safe, read-only operations)
+    bool IsWindowOverGame(HWND hwnd, const RECT& gameRect);
     bool IsWindowTransparent(HWND hwnd);
     bool IsWindowLayered(HWND hwnd);
     bool IsWindowClickThrough(HWND hwnd);
@@ -104,22 +117,33 @@ private:
     std::wstring GetProcessNameFromWindow(HWND hwnd);
     DWORD GetProcessIdFromWindow(HWND hwnd);
 
+protected:
+    /**
+     * Override from IMonitorModule - performs one monitoring cycle.
+     * Called periodically by the monitoring thread.
+     */
+    void DoMonitorCycle() override;
+
 public:
     OverlayDetector();
-    ~OverlayDetector();
+    virtual ~OverlayDetector();
 
-    // Initialization
-    bool Initialize();
-    void Shutdown();
+    // Initialization (override from base)
+    bool Initialize() override;
+    void Shutdown() override;
 
-    // Game window setup
+    // Game window setup (thread-safe)
     bool SetGameWindow(HWND hwnd);
     bool SetGameWindow(const std::wstring& windowTitle);
     bool SetGameWindowByClass(const std::wstring& className);
     bool SetGameWindowByProcess(DWORD processId);
-    HWND GetGameWindow() const { return m_gameWindow; }
 
-    // Signatures
+    HWND GetGameWindow() const {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        return m_gameWindow;
+    }
+
+    // Signatures (thread-safe)
     void AddSignature(const OverlaySignature& sig);
     void AddCheatSignature(const std::wstring& processName, const std::wstring& className,
                            const std::wstring& windowTitle, const std::string& description);
@@ -127,18 +151,13 @@ public:
     void LoadDefaultSignatures();
     void ClearSignatures();
 
-    // Whitelist
+    // Whitelist (thread-safe)
     void AddWhitelistedProcess(const std::wstring& processName);
     void AddWhitelistedClass(const std::wstring& className);
     void ClearWhitelist();
     bool IsWhitelisted(const WindowInfo& info);
 
-    // Monitoring
-    bool StartMonitoring(DWORD intervalMs = 500);
-    void StopMonitoring();
-    bool IsMonitoring() const { return m_monitoring; }
-
-    // Manual scanning
+    // Manual scanning (thread-safe)
     std::vector<WindowInfo> ScanForOverlays();
     std::vector<DetectionResult> DetectCheatOverlays();
     bool HasSuspiciousOverlays();
@@ -152,14 +171,22 @@ public:
     bool CheckD3DHooks();
     bool CheckDWMComposition();
 
-    // Callbacks
-    void SetDetectionCallback(DetectionCallback callback) { m_detectionCallback = callback; }
-    void SetOverlayFoundCallback(DetectionCallback callback) { m_onOverlayFound = callback; }
+    // Callbacks (thread-safe, invoked outside of locks)
+    void SetOverlayFoundCallback(OverlayCallback callback) {
+        std::lock_guard<std::mutex> lock(m_callbackMutex);
+        m_overlayCallback = callback;
+    }
 
-    // Status
-    int GetOverlayCount() const { return static_cast<int>(m_overlayWindows.size()); }
-    const std::vector<WindowInfo>& GetDetectedOverlays() const { return m_overlayWindows; }
-    const std::string& GetLastError() const { return m_lastError; }
+    // Status (thread-safe)
+    int GetOverlayCount() const {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        return static_cast<int>(m_overlayWindows.size());
+    }
+
+    std::vector<WindowInfo> GetDetectedOverlays() const {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        return m_overlayWindows;  // Return copy for thread safety
+    }
 };
 
 } // namespace AntiCheat
