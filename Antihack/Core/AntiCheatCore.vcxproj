@@ -66,6 +66,7 @@
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <BufferSecurityCheck>true</BufferSecurityCheck>
       <ControlFlowGuard>Guard</ControlFlowGuard>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -108,9 +109,34 @@
     <ClCompile Include="src\antidebug.cpp" />
     <ClCompile Include="src\integrity.cpp" />
     <ClCompile Include="src\ipc.cpp" />
+    <ClCompile Include="src\memory_scan.cpp" />
+    <ClCompile Include="src\file_protection.cpp" />
+    <ClCompile Include="src\encryption.cpp" />
+    <ClCompile Include="src\hooks.cpp" />
+    <ClCompile Include="src\antimacro.cpp" />
+    <ClCompile Include="src\FileProtection.cpp" />
+    <ClCompile Include="src\EncryptionLib.cpp" />
+    <ClCompile Include="src\MacroDetector.cpp" />
+    <ClCompile Include="src\HookDetector.cpp" />
+    <ClCompile Include="src\CheatSignatures.cpp" />
+    <ClCompile Include="src\IPCManager.cpp" />
+    <ClCompile Include="src\AntiCheatEngine.cpp" />
+    <ClCompile Include="src\MemoryPatcher.cpp" />
+    <ClCompile Include="src\ProcessMonitor.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\anticheat_core.h" />
+    <ClInclude Include="include\stdafx.h" />
+    <ClInclude Include="include\internal\common.h" />
+    <ClInclude Include="include\internal\FileProtection.h" />
+    <ClInclude Include="include\internal\EncryptionLib.h" />
+    <ClInclude Include="include\internal\MacroDetector.h" />
+    <ClInclude Include="include\internal\HookDetector.h" />
+    <ClInclude Include="include\internal\CheatSignatures.h" />
+    <ClInclude Include="include\internal\IPCManager.h" />
+    <ClInclude Include="include\internal\AntiCheatEngine.h" />
+    <ClInclude Include="include\internal\MemoryPatcher.h" />
+    <ClInclude Include="include\internal\ProcessMonitor.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
