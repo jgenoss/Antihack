@@ -12,6 +12,20 @@
 
 namespace AntiCheat {
 
+// Assembly opcode constants
+namespace ASM {
+    enum Opcode : BYTE {
+        JMP = 0xE9,     // Relative jump
+        JE = 0x74,      // Jump if equal
+        JNE = 0x75,     // Jump if not equal
+        JGE = 0x7D,     // Jump if greater or equal
+        NOP = 0x90,     // No operation
+        CALL = 0xE8,    // Relative call
+        CALLI = 0xFF,   // Indirect call
+        PUSH = 0x68     // Push immediate
+    };
+}
+
 class MemoryPatcher {
 public:
     MemoryPatcher() = default;
