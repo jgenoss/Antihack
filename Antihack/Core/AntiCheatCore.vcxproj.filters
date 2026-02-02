@@ -83,6 +83,9 @@
     <ClCompile Include="src\MemoryPatcher.cpp">
       <Filter>Source Files\Security</Filter>
     </ClCompile>
+    <ClCompile Include="src\ProcessMonitor.cpp">
+      <Filter>Source Files\Detection</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\anticheat_core.h">
@@ -116,6 +119,9 @@
       <Filter>Header Files\Internal</Filter>
     </ClInclude>
     <ClInclude Include="include\internal\MemoryPatcher.h">
+      <Filter>Header Files\Internal</Filter>
+    </ClInclude>
+    <ClInclude Include="include\internal\ProcessMonitor.h">
       <Filter>Header Files\Internal</Filter>
     </ClInclude>
   </ItemGroup>
