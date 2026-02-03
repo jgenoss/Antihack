@@ -3,6 +3,7 @@
  * Detects inline hooks, IAT hooks, and API modifications
  */
 
+#include "stdafx.h"
 #include "../include/internal/HookDetector.h"
 #include <Softpub.h>
 #include <WinTrust.h>
@@ -616,12 +617,35 @@ bool HookDetector::CheckDebugRegisters() {
 }
 
 bool HookDetector::CheckDebugFlags() {
-    // Check NtGlobalFlag
-    PPEB pPeb = reinterpret_cast<PPEB>(__readfsdword(0x30));
-    if (pPeb->NtGlobalFlag & 0x70) { // FLG_HEAP_ENABLE_TAIL_CHECK | FLG_HEAP_ENABLE_FREE_CHECK | FLG_HEAP_VALIDATE_PARAMETERS
+    // Check NtGlobalFlag using inline assembly or direct PEB access
+#ifdef _M_IX86
+    // 32-bit: PEB is at fs:[0x30], NtGlobalFlag at PEB+0x68
+    DWORD ntGlobalFlag = 0;
+    __asm {
+        mov eax, fs:[0x30]      // Get PEB
+        mov eax, [eax + 0x68]   // Get NtGlobalFlag
+        mov ntGlobalFlag, eax
+    }
+    // FLG_HEAP_ENABLE_TAIL_CHECK | FLG_HEAP_ENABLE_FREE_CHECK | FLG_HEAP_VALIDATE_PARAMETERS
+    if (ntGlobalFlag & 0x70) {
         return true;
     }
+#else
+    // 64-bit: Use NtQueryInformationProcess instead
+    typedef NTSTATUS(NTAPI* pNtQueryInformationProcess)(HANDLE, ULONG, PVOID, ULONG, PULONG);
+    static pNtQueryInformationProcess NtQueryInfoProcess = reinterpret_cast<pNtQueryInformationProcess>(
+        GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryInformationProcess"));
 
+    if (NtQueryInfoProcess) {
+        DWORD debugFlags = 0;
+        // ProcessDebugFlags = 0x1F
+        if (NtQueryInfoProcess(GetCurrentProcess(), 0x1F, &debugFlags, sizeof(debugFlags), nullptr) >= 0) {
+            if (debugFlags == 0) {
+                return true; // Being debugged
+            }
+        }
+    }
+#endif
     return false;
 }
 

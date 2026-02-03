@@ -9,14 +9,21 @@
 #define AC_INTERNAL_COMMON_H
 
 #include <Windows.h>
+#include <TlHelp32.h>
+#include <Psapi.h>
 #include <string>
 #include <vector>
 #include <map>
+#include <unordered_map>
+#include <set>
+#include <deque>
+#include <queue>
 #include <mutex>
 #include <atomic>
 #include <memory>
 #include <functional>
-#include <chrono>
+#include <algorithm>
+#include <cmath>
 
 namespace AntiCheat {
 
@@ -43,23 +50,30 @@ enum class DetectionType {
     DebuggerAttached,
     InjectedDLL,
     HookedAPI,
+    HookDetected,
     ModifiedMemory,
     MacroDetected,
     FileModified,
-    SuspiciousProcess
+    SuspiciousProcess,
+    SuspiciousModule,
+    SuspiciousThread
 };
 
 // Detection event structure
 struct DetectionEvent {
     DetectionType type;
     Severity severity;
-    std::string name;
-    std::string details;
-    std::chrono::system_clock::time_point timestamp;
+    std::string description;
+    std::string moduleName;
+    void* address;
+    DWORD timestamp;
 
-    DetectionEvent() : type(DetectionType::None), severity(Severity::Info) {
-        timestamp = std::chrono::system_clock::now();
-    }
+    DetectionEvent()
+        : type(DetectionType::None)
+        , severity(Severity::Info)
+        , address(nullptr)
+        , timestamp(GetTickCount())
+    {}
 };
 
 // Callback types

@@ -3,18 +3,50 @@
  * CRC32 integrity verification with monitoring
  */
 
+#include "stdafx.h"
 #include "../include/internal/FileProtection.h"
 #include <fstream>
 #include <sstream>
 
 namespace AntiCheat {
 
-// ============================================================================
-// CONSTRUCTOR / DESTRUCTOR
-// ============================================================================
+// CRC32 lookup table
+static uint32_t s_CRC32Table[256];
+static bool s_CRC32Initialized = false;
+
+static void InitCRC32Table() {
+    if (s_CRC32Initialized) return;
+
+    for (uint32_t i = 0; i < 256; i++) {
+        uint32_t crc = i;
+        for (int j = 0; j < 8; j++) {
+            if (crc & 1) {
+                crc = (crc >> 1) ^ 0xEDB88320;
+            } else {
+                crc >>= 1;
+            }
+        }
+        s_CRC32Table[i] = crc;
+    }
+    s_CRC32Initialized = true;
+}
+
+static uint32_t CalculateCRC32(const void* data, size_t size) {
+    InitCRC32Table();
+    const uint8_t* bytes = static_cast<const uint8_t*>(data);
+    uint32_t crc = 0xFFFFFFFF;
+
+    for (size_t i = 0; i < size; i++) {
+        crc = s_CRC32Table[(crc ^ bytes[i]) & 0xFF] ^ (crc >> 8);
+    }
+
+    return crc ^ 0xFFFFFFFF;
+}
 
 FileProtection::FileProtection()
-    : m_monitorRunning(false), m_monitorThread(nullptr) {
+    : m_monitorThread(NULL)
+    , m_monitorInterval(5000)
+    , m_initialized(false) {
     // Get base path from current module
     wchar_t exePath[MAX_PATH];
     GetModuleFileNameW(NULL, exePath, MAX_PATH);
@@ -26,13 +58,10 @@ FileProtection::~FileProtection() {
     Shutdown();
 }
 
-// ============================================================================
-// INITIALIZATION
-// ============================================================================
-
 bool FileProtection::Initialize() {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_lastError.clear();
+    m_initialized = true;
     return true;
 }
 
@@ -40,6 +69,7 @@ void FileProtection::Shutdown() {
     StopMonitoring();
     std::lock_guard<std::mutex> lock(m_mutex);
     m_protectedFiles.clear();
+    m_initialized = false;
 }
 
 void FileProtection::SetBasePath(const std::wstring& path) {
@@ -52,61 +82,72 @@ void FileProtection::SetDetectionCallback(DetectionCallback callback) {
     m_callback = callback;
 }
 
-// ============================================================================
-// FILE PROTECTION
-// ============================================================================
+std::wstring FileProtection::GetFullPath(const std::wstring& relativePath) {
+    wchar_t fullPath[MAX_PATH];
+    if (!PathCombineW(fullPath, m_basePath.c_str(), relativePath.c_str())) {
+        return relativePath;
+    }
+    return std::wstring(fullPath);
+}
 
-bool FileProtection::AddProtectedFile(const std::wstring& relativePath, uint32_t expectedCrc, bool isRequired) {
+bool FileProtection::AddProtectedFile(const std::wstring& path, bool calculateHash) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    try {
-        std::wstring fullPath = GetFullPath(relativePath);
+    std::wstring fullPath = GetFullPath(path);
 
-        FileInfo info;
-        info.path = fullPath;
-        info.relativePath = relativePath;
-        info.expectedCrc = expectedCrc;
-        info.isRequired = isRequired;
-        info.isVerified = false;
+    // Check if file exists
+    WIN32_FILE_ATTRIBUTE_DATA fileData;
+    if (!GetFileAttributesExW(fullPath.c_str(), GetFileExInfoStandard, &fileData)) {
+        m_lastError = "File not found";
+        return false;
+    }
 
-        // Get file attributes
-        WIN32_FILE_ATTRIBUTE_DATA fileData;
-        if (GetFileAttributesExW(fullPath.c_str(), GetFileExInfoStandard, &fileData)) {
-            info.fileSize = fileData.nFileSizeLow;
-            info.lastModified = fileData.ftLastWriteTime;
-        }
+    FileInfo info;
+    info.path = fullPath;
+    info.relativePath = path;
+    info.expectedSize = ((uint64_t)fileData.nFileSizeHigh << 32) | fileData.nFileSizeLow;
+    info.lastModified = fileData.ftLastWriteTime;
+    info.isRequired = true;
+    info.verified = false;
+    info.lastCheckTime = 0;
 
-        m_protectedFiles.push_back(info);
+    if (calculateHash) {
+        info.expectedCRC = CalculateFileCRC(fullPath);
+    } else {
+        info.expectedCRC = 0;
+    }
+
+    m_protectedFiles[fullPath] = info;
+    return true;
+}
+
+bool FileProtection::AddProtectedFile(const std::wstring& path, uint32_t expectedCRC, uint64_t expectedSize) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    std::wstring fullPath = GetFullPath(path);
+
+    FileInfo info;
+    info.path = fullPath;
+    info.relativePath = path;
+    info.expectedCRC = expectedCRC;
+    info.expectedSize = expectedSize;
+    info.isRequired = true;
+    info.verified = false;
+    info.lastCheckTime = 0;
+    ZeroMemory(&info.lastModified, sizeof(FILETIME));
+
+    m_protectedFiles[fullPath] = info;
+    return true;
+}
+
+bool FileProtection::RemoveProtectedFile(const std::wstring& path) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    std::wstring fullPath = GetFullPath(path);
+    auto it = m_protectedFiles.find(fullPath);
+    if (it != m_protectedFiles.end()) {
+        m_protectedFiles.erase(it);
         return true;
-    }
-    catch (const std::exception& e) {
-        m_lastError = e.what();
-        return false;
-    }
-}
-
-bool FileProtection::AddProtectedFile(const std::wstring& relativePath, bool isRequired) {
-    try {
-        std::wstring fullPath = GetFullPath(relativePath);
-        auto fileData = ReadFileBytes(fullPath);
-        uint32_t crc = CalculateCRC32(fileData);
-        return AddProtectedFile(relativePath, crc, isRequired);
-    }
-    catch (const std::exception& e) {
-        m_lastError = e.what();
-        return false;
-    }
-}
-
-bool FileProtection::RemoveProtectedFile(const std::wstring& relativePath) {
-    std::lock_guard<std::mutex> lock(m_mutex);
-
-    std::wstring fullPath = GetFullPath(relativePath);
-    for (auto it = m_protectedFiles.begin(); it != m_protectedFiles.end(); ++it) {
-        if (it->path == fullPath || it->relativePath == relativePath) {
-            m_protectedFiles.erase(it);
-            return true;
-        }
     }
     return false;
 }
@@ -116,104 +157,131 @@ void FileProtection::ClearProtectedFiles() {
     m_protectedFiles.clear();
 }
 
-// ============================================================================
-// VERIFICATION
-// ============================================================================
+bool FileProtection::VerifyFile(const std::wstring& path, VerificationResult& result) {
+    std::wstring fullPath = GetFullPath(path);
 
-bool FileProtection::VerifyFile(const std::wstring& relativePath) {
+    result.path = fullPath;
+    result.passed = false;
+    result.errorMessage.clear();
+
     std::lock_guard<std::mutex> lock(m_mutex);
 
-    std::wstring fullPath = GetFullPath(relativePath);
-    for (auto& file : m_protectedFiles) {
-        if (file.path == fullPath || file.relativePath == relativePath) {
-            try {
-                auto data = ReadFileBytes(file.path);
-                uint32_t currentCrc = CalculateCRC32(data);
-
-                if (currentCrc != file.expectedCrc) {
-                    file.isVerified = false;
-
-                    if (m_callback) {
-                        DetectionEvent event;
-                        event.type = DetectionType::FileModified;
-                        event.severity = file.isRequired ? Severity::Critical : Severity::Warning;
-                        event.name = "File Modified";
-                        event.details = WStringToString(file.path);
-                        m_callback(event);
-                    }
-                    return false;
-                }
-
-                file.isVerified = true;
-                return true;
-            }
-            catch (const std::exception&) {
-                file.isVerified = false;
-                return false;
-            }
-        }
+    auto it = m_protectedFiles.find(fullPath);
+    if (it == m_protectedFiles.end()) {
+        result.errorMessage = "File not in protected list";
+        return false;
     }
 
-    m_lastError = "File not in protected list";
-    return false;
-}
+    FileInfo& info = it->second;
+    result.expectedCRC = info.expectedCRC;
+    result.expectedSize = info.expectedSize;
 
-bool FileProtection::VerifyAllFiles(std::wstring* failedFile) {
-    std::lock_guard<std::mutex> lock(m_mutex);
-
-    for (auto& file : m_protectedFiles) {
-        try {
-            auto data = ReadFileBytes(file.path);
-            uint32_t currentCrc = CalculateCRC32(data);
-
-            if (currentCrc != file.expectedCrc) {
-                file.isVerified = false;
-
-                if (m_callback) {
-                    DetectionEvent event;
-                    event.type = DetectionType::FileModified;
-                    event.severity = file.isRequired ? Severity::Critical : Severity::Warning;
-                    event.name = "File Modified";
-                    event.details = WStringToString(file.path);
-                    m_callback(event);
-                }
-
-                if (file.isRequired) {
-                    if (failedFile) *failedFile = file.path;
-                    return false;
-                }
-            }
-            else {
-                file.isVerified = true;
-            }
-        }
-        catch (const std::exception&) {
-            file.isVerified = false;
-            if (file.isRequired) {
-                if (failedFile) *failedFile = file.path;
-                return false;
-            }
-        }
+    // Get current file info
+    WIN32_FILE_ATTRIBUTE_DATA fileData;
+    if (!GetFileAttributesExW(fullPath.c_str(), GetFileExInfoStandard, &fileData)) {
+        result.errorMessage = "Cannot access file";
+        result.currentCRC = 0;
+        result.currentSize = 0;
+        return false;
     }
 
+    result.currentSize = ((uint64_t)fileData.nFileSizeHigh << 32) | fileData.nFileSizeLow;
+
+    // Check size if expected
+    if (info.expectedSize > 0 && result.currentSize != info.expectedSize) {
+        result.errorMessage = "File size mismatch";
+        info.verified = false;
+
+        if (m_callback) {
+            DetectionEvent event;
+            event.type = DetectionType::FileModified;
+            event.severity = info.isRequired ? Severity::Critical : Severity::Warning;
+            event.description = "File size changed: " + std::string(fullPath.begin(), fullPath.end());
+            event.moduleName = "";
+            event.address = nullptr;
+            event.timestamp = GetTickCount();
+            m_callback(event);
+        }
+
+        if (m_violationCallback) {
+            m_violationCallback(result);
+        }
+
+        return false;
+    }
+
+    // Calculate current CRC
+    result.currentCRC = CalculateFileCRC(fullPath);
+
+    if (result.currentCRC != info.expectedCRC) {
+        result.errorMessage = "CRC mismatch";
+        info.verified = false;
+
+        if (m_callback) {
+            DetectionEvent event;
+            event.type = DetectionType::FileModified;
+            event.severity = info.isRequired ? Severity::Critical : Severity::Warning;
+            event.description = "File CRC mismatch: " + std::string(fullPath.begin(), fullPath.end());
+            event.moduleName = "";
+            event.address = nullptr;
+            event.timestamp = GetTickCount();
+            m_callback(event);
+        }
+
+        if (m_violationCallback) {
+            m_violationCallback(result);
+        }
+
+        return false;
+    }
+
+    info.verified = true;
+    info.lastCheckTime = GetTickCount64();
+    result.passed = true;
     return true;
 }
 
-uint32_t FileProtection::CalculateFileCRC(const std::wstring& path) {
-    try {
-        auto data = ReadFileBytes(path);
-        return CalculateCRC32(data);
+bool FileProtection::VerifyAllFiles(std::vector<VerificationResult>& results) {
+    results.clear();
+    bool allPassed = true;
+
+    std::vector<std::wstring> paths;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        for (const auto& pair : m_protectedFiles) {
+            paths.push_back(pair.first);
+        }
     }
-    catch (...) {
-        return 0;
+
+    for (const auto& path : paths) {
+        VerificationResult result;
+        if (!VerifyFile(path, result)) {
+            allPassed = false;
+        }
+        results.push_back(result);
     }
+
+    return allPassed;
 }
 
-// ============================================================================
-// CONFIGURATION
-// ============================================================================
+uint32_t FileProtection::CalculateFileCRC(const std::wstring& path) {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        return 0;
+    }
 
-bool FileProtection::LoadConfiguration(const std::wstring& configPath) {
+    size_t fileSize = static_cast<size_t>(file.tellg());
+    file.seekg(0, std::ios::beg);
+
+    std::vector<uint8_t> buffer(fileSize);
+    if (!file.read(reinterpret_cast<char*>(buffer.data()), fileSize)) {
+        return 0;
+    }
+
+    return CalculateCRC32(buffer.data(), buffer.size());
+}
+
+bool FileProtection::LoadConfig(const std::wstring& configPath) {
     std::wifstream config(configPath);
     if (!config.is_open()) {
         m_lastError = "Cannot open configuration file";
@@ -222,32 +290,36 @@ bool FileProtection::LoadConfiguration(const std::wstring& configPath) {
 
     std::wstring line;
     while (std::getline(config, line)) {
-        // Skip empty lines and comments
         if (line.empty() || line[0] == L'#') continue;
 
         std::wistringstream iss(line);
         std::wstring relativePath;
         std::wstring crcHex;
-        std::wstring required;
+        std::wstring sizeStr;
 
         if (std::getline(iss, relativePath, L',') &&
             std::getline(iss, crcHex, L',') &&
-            std::getline(iss, required)) {
+            std::getline(iss, sizeStr)) {
 
-            uint32_t crc;
+            uint32_t crc = 0;
+            uint64_t size = 0;
+
             std::wstringstream ss;
             ss << std::hex << crcHex;
             ss >> crc;
 
-            bool isRequired = (required == L"true" || required == L"1");
-            AddProtectedFile(relativePath, crc, isRequired);
+            std::wstringstream ss2;
+            ss2 << sizeStr;
+            ss2 >> size;
+
+            AddProtectedFile(relativePath, crc, size);
         }
     }
 
     return true;
 }
 
-bool FileProtection::SaveConfiguration(const std::wstring& configPath) {
+bool FileProtection::SaveConfig(const std::wstring& configPath) {
     std::lock_guard<std::mutex> lock(m_mutex);
 
     std::wofstream outFile(configPath);
@@ -257,20 +329,17 @@ bool FileProtection::SaveConfiguration(const std::wstring& configPath) {
     }
 
     outFile << L"# AntiCheat File Protection Configuration\n";
-    outFile << L"# Format: relative_path,crc32,required\n\n";
+    outFile << L"# Format: relative_path,crc32_hex,size\n\n";
 
-    for (const auto& file : m_protectedFiles) {
-        outFile << file.relativePath << L","
-                << std::hex << std::uppercase << file.expectedCrc << L","
-                << (file.isRequired ? L"true" : L"false") << std::endl;
+    for (const auto& pair : m_protectedFiles) {
+        const FileInfo& info = pair.second;
+        outFile << info.relativePath << L","
+                << std::hex << std::uppercase << info.expectedCRC << L","
+                << std::dec << info.expectedSize << std::endl;
     }
 
     return true;
 }
-
-// ============================================================================
-// MONITORING
-// ============================================================================
 
 DWORD WINAPI FileProtection::MonitorThreadProc(LPVOID param) {
     FileProtection* self = static_cast<FileProtection*>(param);
@@ -279,20 +348,22 @@ DWORD WINAPI FileProtection::MonitorThreadProc(LPVOID param) {
 }
 
 void FileProtection::MonitorLoop() {
-    while (m_monitorRunning) {
-        VerifyAllFiles();
-        Sleep(5000);  // Check every 5 seconds
+    while (m_monitoring) {
+        std::vector<VerificationResult> results;
+        VerifyAllFiles(results);
+        Sleep(m_monitorInterval);
     }
 }
 
-bool FileProtection::StartMonitoring() {
-    if (m_monitorRunning) return true;
+bool FileProtection::StartMonitoring(DWORD intervalMs) {
+    if (m_monitoring) return true;
 
-    m_monitorRunning = true;
-    m_monitorThread = CreateThread(nullptr, 0, MonitorThreadProc, this, 0, nullptr);
+    m_monitorInterval = intervalMs;
+    m_monitoring = true;
 
+    m_monitorThread = CreateThread(NULL, 0, MonitorThreadProc, this, 0, NULL);
     if (!m_monitorThread) {
-        m_monitorRunning = false;
+        m_monitoring = false;
         m_lastError = "Failed to create monitor thread";
         return false;
     }
@@ -301,22 +372,18 @@ bool FileProtection::StartMonitoring() {
 }
 
 void FileProtection::StopMonitoring() {
-    if (!m_monitorRunning) return;
+    if (!m_monitoring) return;
 
-    m_monitorRunning = false;
+    m_monitoring = false;
 
     if (m_monitorThread) {
         WaitForSingleObject(m_monitorThread, 5000);
         CloseHandle(m_monitorThread);
-        m_monitorThread = nullptr;
+        m_monitorThread = NULL;
     }
 }
 
-// ============================================================================
-// DIRECTORY PROTECTION
-// ============================================================================
-
-int FileProtection::ProtectDirectory(const std::wstring& dirPath, const std::wstring& pattern) {
+int FileProtection::ProtectDirectory(const std::wstring& dirPath, const std::wstring& pattern, bool recursive) {
     std::wstring fullDir = GetFullPath(dirPath);
     std::wstring searchPath = fullDir + L"\\" + pattern;
 
@@ -329,8 +396,17 @@ int FileProtection::ProtectDirectory(const std::wstring& dirPath, const std::wst
 
     int count = 0;
     do {
-        if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-            std::wstring relativePath = dirPath + L"\\" + findData.cFileName;
+        if (wcscmp(findData.cFileName, L".") == 0 || wcscmp(findData.cFileName, L"..") == 0) {
+            continue;
+        }
+
+        std::wstring relativePath = dirPath + L"\\" + findData.cFileName;
+
+        if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            if (recursive) {
+                count += ProtectDirectory(relativePath, pattern, true);
+            }
+        } else {
             if (AddProtectedFile(relativePath, true)) {
                 count++;
             }
@@ -341,34 +417,26 @@ int FileProtection::ProtectDirectory(const std::wstring& dirPath, const std::wst
     return count;
 }
 
-// ============================================================================
-// PRIVATE METHODS
-// ============================================================================
+FileProtection::FileInfo FileProtection::GetFileInfo(const std::wstring& path) {
+    std::lock_guard<std::mutex> lock(m_mutex);
 
-ByteVector FileProtection::ReadFileBytes(const std::wstring& path) {
-    ByteVector buffer;
-    std::ifstream file(path, std::ios::binary);
-
-    if (!file.is_open()) {
-        throw std::runtime_error("Cannot open file");
+    std::wstring fullPath = GetFullPath(path);
+    auto it = m_protectedFiles.find(fullPath);
+    if (it != m_protectedFiles.end()) {
+        return it->second;
     }
 
-    file.seekg(0, std::ios::end);
-    size_t fileSize = static_cast<size_t>(file.tellg());
-    file.seekg(0, std::ios::beg);
-
-    buffer.resize(fileSize);
-    file.read(reinterpret_cast<char*>(buffer.data()), fileSize);
-
-    return buffer;
+    return FileInfo();
 }
 
-std::wstring FileProtection::GetFullPath(const std::wstring& relativePath) {
-    wchar_t fullPath[MAX_PATH];
-    if (!PathCombineW(fullPath, m_basePath.c_str(), relativePath.c_str())) {
-        return relativePath;  // Return as-is if combination fails
+std::vector<std::wstring> FileProtection::GetProtectedFiles() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    std::vector<std::wstring> files;
+    for (const auto& pair : m_protectedFiles) {
+        files.push_back(pair.second.relativePath);
     }
-    return std::wstring(fullPath);
+    return files;
 }
 
 } // namespace AntiCheat
