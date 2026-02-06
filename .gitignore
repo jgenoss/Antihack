@@ -1,0 +1,4 @@
+*.vsidx
+*.db
+/Antihack/Core/.vs
+/Antihack/Core/obj

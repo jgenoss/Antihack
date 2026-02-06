@@ -1,483 +1,229 @@
-/**
- * AntiCheatCore - Encryption Library Implementation
- * AES-256 with Windows CryptoAPI, plus RC4 and XOR utilities
- */
-
+#include "stdafx.h"
 #include "../include/internal/EncryptionLib.h"
-#include <fstream>
-#include <sstream>
-#include <random>
+#include <wincrypt.h>
 #include <cstring>
+#include <stdexcept>
+#include <sstream>
+
+
+std::string EncryptionLib::GetLastErrorAsString() {
+    DWORD error = GetLastError();
+    if (error == 0) {
+        return "No error";
+    }
+
+    LPSTR messageBuffer = nullptr;
+    size_t size = FormatMessageA(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        error,
+        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+        (LPSTR)&messageBuffer,
+        0,
+        NULL
+    );
+
+    std::string message(messageBuffer, size);
+    LocalFree(messageBuffer);
+    return message;
+}
 
 #pragma pack(push, 1)
-struct AESKeyBlob {
+typedef struct {
     BLOBHEADER hdr;
     DWORD dwKeySize;
     BYTE rgbKeyData[32];
-};
+} CustomKeyBlob;
 #pragma pack(pop)
 
-namespace AntiCheat {
-
-// ============================================================================
-// RC4 STATE
-// ============================================================================
-
-struct RC4State {
-    uint8_t S[256];
-    int i, j;
-
-    void Init(const uint8_t* key, size_t keyLen) {
-        for (int n = 0; n < 256; n++) {
-            S[n] = static_cast<uint8_t>(n);
-        }
-
-        int jj = 0;
-        for (int n = 0; n < 256; n++) {
-            jj = (jj + S[n] + key[n % keyLen]) % 256;
-            std::swap(S[n], S[jj]);
-        }
-
-        i = 0;
-        j = 0;
-    }
-
-    void Process(uint8_t* data, size_t length) {
-        for (size_t n = 0; n < length; n++) {
-            i = (i + 1) % 256;
-            j = (j + S[i]) % 256;
-            std::swap(S[i], S[j]);
-            uint8_t k = S[(S[i] + S[j]) % 256];
-            data[n] ^= k;
-        }
-    }
-};
-
-// ============================================================================
-// CONSTRUCTOR / DESTRUCTOR
-// ============================================================================
-
-EncryptionLib::EncryptionLib()
-    : m_hProvider(0), m_hKey(0), m_initialized(false) {
+EncryptionLib::EncryptionLib() : hProvider(0), hKey(0) {
     InitializeProvider();
 }
 
 EncryptionLib::~EncryptionLib() {
-    Cleanup();
+    if (hKey) {
+        CryptDestroyKey(hKey);
+    }
+    if (hProvider) {
+        CryptReleaseContext(hProvider, 0);
+    }
 }
 
-// ============================================================================
-// INITIALIZATION
-// ============================================================================
-
-bool EncryptionLib::InitializeProvider() {
-    std::lock_guard<std::mutex> lock(m_mutex);
-
-    if (m_hProvider) return true;
-
-    if (!CryptAcquireContextW(&m_hProvider, NULL, MS_ENH_RSA_AES_PROV,
-                               PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) {
-        m_lastError = "Failed to initialize crypto provider";
-        return false;
+void EncryptionLib::InitializeProvider() {
+    if (!CryptAcquireContext(&hProvider, NULL, MS_ENH_RSA_AES_PROV,
+        PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) {
+        throw std::runtime_error("Error al inicializar el proveedor de encriptacion");
     }
-
-    m_initialized = true;
-    return true;
 }
 
-bool EncryptionLib::ImportKey() {
-    if (m_key.size() != KEY_SIZE) {
-        m_lastError = "Key must be 32 bytes (256 bits)";
-        return false;
-    }
 
-    if (m_hKey) {
-        CryptDestroyKey(m_hKey);
-        m_hKey = 0;
-    }
-
-    AESKeyBlob keyBlob = {};
+void EncryptionLib::ImportKey() {
+    // Crear y configurar el blob de la clave
+    CustomKeyBlob keyBlob = {};
     keyBlob.hdr.bType = PLAINTEXTKEYBLOB;
     keyBlob.hdr.bVersion = CUR_BLOB_VERSION;
     keyBlob.hdr.reserved = 0;
     keyBlob.hdr.aiKeyAlg = CALG_AES_256;
-    keyBlob.dwKeySize = KEY_SIZE;
-    memcpy(keyBlob.rgbKeyData, m_key.data(), KEY_SIZE);
+    keyBlob.dwKeySize = 32;
 
-    if (!CryptImportKey(m_hProvider, reinterpret_cast<BYTE*>(&keyBlob),
-                        sizeof(AESKeyBlob), 0, 0, &m_hKey)) {
-        m_lastError = "Failed to import key";
-        return false;
+    // Copiar la clave al blob
+    memcpy(keyBlob.rgbKeyData, key.data(), 32);
+
+    // Importar la clave
+    if (!CryptImportKey(hProvider, reinterpret_cast<BYTE*>(&keyBlob),
+        sizeof(CustomKeyBlob), 0, 0, &hKey)) {
+        throw std::runtime_error("Error al importar la clave");
     }
-
-    return true;
 }
 
-void EncryptionLib::Cleanup() {
-    std::lock_guard<std::mutex> lock(m_mutex);
+std::vector<uint8_t> EncryptionLib::GenerateKey() {
+    std::vector<uint8_t> newKey(32); // AES-256
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dis(0, 255);
 
-    if (m_hKey) {
-        CryptDestroyKey(m_hKey);
-        m_hKey = 0;
-    }
-    if (m_hProvider) {
-        CryptReleaseContext(m_hProvider, 0);
-        m_hProvider = 0;
+    for (auto& byte : newKey) {
+        byte = static_cast<uint8_t>(dis(gen));
     }
 
-    SecureZeroMemory(m_key.data(), m_key.size());
-    m_key.clear();
-    m_initialized = false;
+    return newKey;
 }
 
-// ============================================================================
-// KEY MANAGEMENT
-// ============================================================================
-
-bool EncryptionLib::GenerateKey() {
-    std::lock_guard<std::mutex> lock(m_mutex);
-
-    m_key.resize(KEY_SIZE);
-
-    if (!GenerateRandomBytes(m_key.data(), KEY_SIZE)) {
-        m_lastError = "Failed to generate random key";
-        return false;
+void EncryptionLib::SetKey(const std::vector<uint8_t>& newKey) {
+    if (newKey.size() != 32) {
+        throw std::runtime_error("La clave debe ser de 32 bytes (256 bits)");
     }
 
-    return ImportKey();
-}
-
-bool EncryptionLib::SetKey(const ByteVector& key) {
-    std::lock_guard<std::mutex> lock(m_mutex);
-
-    if (key.size() != KEY_SIZE) {
-        m_lastError = "Key must be 32 bytes (256 bits)";
-        return false;
+    if (hKey) {
+        CryptDestroyKey(hKey);
+        hKey = 0;
     }
 
-    m_key = key;
-    return ImportKey();
+    key = newKey;
+    ImportKey();
 }
 
-bool EncryptionLib::SetKey(const uint8_t* key, size_t length) {
-    if (!key || length != KEY_SIZE) {
-        m_lastError = "Invalid key parameters";
-        return false;
-    }
-
-    ByteVector keyVec(key, key + length);
-    return SetKey(keyVec);
-}
-
-ByteVector EncryptionLib::GetKey() const {
-    return m_key;
-}
-
-bool EncryptionLib::SaveKeyToFile(const std::wstring& path) {
-    std::lock_guard<std::mutex> lock(m_mutex);
-
-    if (m_key.empty()) {
-        m_lastError = "No key to save";
-        return false;
-    }
-
-    std::ofstream file(path, std::ios::binary);
+void EncryptionLib::SaveKeyToFile(const std::wstring& keyPath) {
+    std::ofstream file(keyPath, std::ios::binary);
     if (!file.is_open()) {
-        m_lastError = "Cannot create key file";
-        return false;
+        throw std::runtime_error("No se puede guardar la clave");
     }
-
-    file.write(reinterpret_cast<const char*>(m_key.data()), m_key.size());
-    return file.good();
+    file.write(reinterpret_cast<const char*>(key.data()), key.size());
 }
 
-bool EncryptionLib::LoadKeyFromFile(const std::wstring& path) {
-    std::ifstream file(path, std::ios::binary);
+void EncryptionLib::LoadKeyFromFile(const std::wstring& keyPath) {
+    std::ifstream file(keyPath, std::ios::binary);
     if (!file.is_open()) {
-        m_lastError = "Cannot open key file";
-        return false;
+        throw std::runtime_error("No se puede cargar la clave");
     }
 
-    ByteVector key(KEY_SIZE);
-    file.read(reinterpret_cast<char*>(key.data()), KEY_SIZE);
-
-    if (!file.good()) {
-        m_lastError = "Failed to read key file";
-        return false;
-    }
-
-    return SetKey(key);
+    std::vector<uint8_t> newKey(32);
+    file.read(reinterpret_cast<char*>(newKey.data()), 32);
+    SetKey(newKey);
 }
 
-// ============================================================================
-// DATA ENCRYPTION
-// ============================================================================
-
-ByteVector EncryptionLib::Encrypt(const ByteVector& data) {
-    std::lock_guard<std::mutex> lock(m_mutex);
-
-    if (!m_hKey) {
-        m_lastError = "Key not initialized";
-        return ByteVector();
+std::vector<uint8_t> EncryptionLib::EncryptData(const std::vector<uint8_t>& data) {
+    if (!hKey) {
+        throw std::runtime_error("Clave no inicializada");
     }
 
     if (data.empty()) {
-        m_lastError = "Empty input data";
-        return ByteVector();
+        throw std::runtime_error("Los datos de entrada estan vacios");
     }
 
-    // Calculate required buffer size
+    // Calcular el tamaño del buffer necesario
     DWORD encryptedSize = static_cast<DWORD>(data.size());
-    if (!CryptEncrypt(m_hKey, 0, TRUE, 0, nullptr, &encryptedSize, 0)) {
-        m_lastError = "Failed to calculate encrypted size";
-        return ByteVector();
+    if (!CryptEncrypt(hKey, 0, TRUE, 0, nullptr, &encryptedSize, 0)) {
+        std::stringstream ss;
+        ss << "Error al calcular el tamaño necesario para encriptar: " << GetLastErrorAsString();
+        throw std::runtime_error(ss.str());
     }
 
-    // Create buffer and encrypt
-    ByteVector encrypted(encryptedSize);
+    // Crear buffer con el tamaño necesario
+    std::vector<uint8_t> encrypted(encryptedSize);
     memcpy(encrypted.data(), data.data(), data.size());
 
     DWORD dataSize = static_cast<DWORD>(data.size());
-    if (!CryptEncrypt(m_hKey, 0, TRUE, 0, encrypted.data(), &dataSize, encryptedSize)) {
-        m_lastError = "Encryption failed";
-        return ByteVector();
+    if (!CryptEncrypt(hKey, 0, TRUE, 0, encrypted.data(), &dataSize, encryptedSize)) {
+        std::stringstream ss;
+        ss << "Error durante la encriptacion: " << GetLastErrorAsString();
+        throw std::runtime_error(ss.str());
     }
 
-    encrypted.resize(dataSize);
     return encrypted;
 }
 
-ByteVector EncryptionLib::Decrypt(const ByteVector& encrypted) {
-    std::lock_guard<std::mutex> lock(m_mutex);
-
-    if (!m_hKey) {
-        m_lastError = "Key not initialized";
-        return ByteVector();
+std::vector<uint8_t> EncryptionLib::DecryptData(const std::vector<uint8_t>& encrypted) {
+    if (!hKey) {
+        throw std::runtime_error("Clave no inicializada");
     }
 
-    ByteVector decrypted = encrypted;
+    std::vector<uint8_t> decrypted = encrypted;
     DWORD size = static_cast<DWORD>(encrypted.size());
 
-    if (!CryptDecrypt(m_hKey, 0, TRUE, 0, decrypted.data(), &size)) {
-        m_lastError = "Decryption failed";
-        return ByteVector();
+    if (!CryptDecrypt(hKey, 0, TRUE, 0, decrypted.data(), &size)) {
+        throw std::runtime_error("Error al desencriptar datos");
     }
 
     decrypted.resize(size);
     return decrypted;
 }
 
-bool EncryptionLib::Encrypt(const uint8_t* input, size_t inputLen,
-                            uint8_t* output, size_t* outputLen) {
-    if (!input || !output || !outputLen || inputLen == 0) {
-        m_lastError = "Invalid parameters";
-        return false;
-    }
-
-    ByteVector data(input, input + inputLen);
-    ByteVector encrypted = Encrypt(data);
-
-    if (encrypted.empty()) return false;
-
-    if (*outputLen < encrypted.size()) {
-        *outputLen = encrypted.size();
-        m_lastError = "Output buffer too small";
-        return false;
-    }
-
-    memcpy(output, encrypted.data(), encrypted.size());
-    *outputLen = encrypted.size();
-    return true;
-}
-
-bool EncryptionLib::Decrypt(const uint8_t* input, size_t inputLen,
-                            uint8_t* output, size_t* outputLen) {
-    if (!input || !output || !outputLen || inputLen == 0) {
-        m_lastError = "Invalid parameters";
-        return false;
-    }
-
-    ByteVector encrypted(input, input + inputLen);
-    ByteVector decrypted = Decrypt(encrypted);
-
-    if (decrypted.empty()) return false;
-
-    if (*outputLen < decrypted.size()) {
-        *outputLen = decrypted.size();
-        m_lastError = "Output buffer too small";
-        return false;
-    }
-
-    memcpy(output, decrypted.data(), decrypted.size());
-    *outputLen = decrypted.size();
-    return true;
-}
-
-// ============================================================================
-// FILE ENCRYPTION
-// ============================================================================
-
-bool EncryptionLib::EncryptFile(const std::wstring& inputPath, const std::wstring& outputPath) {
+void EncryptionLib::EncryptFile(const std::wstring& inputPath, const std::wstring& outputPath) {
     std::ifstream inFile(inputPath, std::ios::binary);
     if (!inFile.is_open()) {
-        m_lastError = "Cannot open input file";
-        return false;
+        throw std::runtime_error("No se puede abrir el archivo de entrada: " + std::string(inputPath.begin(), inputPath.end()));
     }
 
+    // Leer el archivo de entrada
     inFile.seekg(0, std::ios::end);
-    size_t fileSize = static_cast<size_t>(inFile.tellg());
+    size_t fileSize = inFile.tellg();
     inFile.seekg(0, std::ios::beg);
 
     if (fileSize == 0) {
-        m_lastError = "Input file is empty";
-        return false;
+        throw std::runtime_error("El archivo de entrada esta vacio");
     }
 
-    ByteVector data(fileSize);
+    std::vector<uint8_t> data(fileSize);
     inFile.read(reinterpret_cast<char*>(data.data()), fileSize);
     inFile.close();
 
-    ByteVector encrypted = Encrypt(data);
-    if (encrypted.empty()) return false;
+    if (!inFile) {
+        throw std::runtime_error("Error al leer el archivo de entrada");
+    }
 
+    // Encriptar los datos
+    auto encrypted = EncryptData(data);
+
+    // Guardar los datos encriptados
     std::ofstream outFile(outputPath, std::ios::binary);
     if (!outFile.is_open()) {
-        m_lastError = "Cannot create output file";
-        return false;
+        throw std::runtime_error("No se puede crear el archivo de salida: " + std::string(outputPath.begin(), outputPath.end()));
     }
 
     outFile.write(reinterpret_cast<const char*>(encrypted.data()), encrypted.size());
-    return outFile.good();
+    if (!outFile) {
+        throw std::runtime_error("Error al escribir el archivo encriptado");
+    }
 }
 
-bool EncryptionLib::DecryptFile(const std::wstring& inputPath, const std::wstring& outputPath) {
+void EncryptionLib::DecryptFile(const std::wstring& inputPath, const std::wstring& outputPath) {
     std::ifstream inFile(inputPath, std::ios::binary);
     if (!inFile.is_open()) {
-        m_lastError = "Cannot open encrypted file";
-        return false;
+        throw std::runtime_error("No se puede abrir el archivo encriptado");
     }
 
-    ByteVector encrypted((std::istreambuf_iterator<char>(inFile)),
-                          std::istreambuf_iterator<char>());
+    std::vector<uint8_t> encrypted(
+        (std::istreambuf_iterator<char>(inFile)),
+        std::istreambuf_iterator<char>()
+    );
 
-    ByteVector decrypted = Decrypt(encrypted);
-    if (decrypted.empty()) return false;
+    auto decrypted = DecryptData(encrypted);
 
     std::ofstream outFile(outputPath, std::ios::binary);
     if (!outFile.is_open()) {
-        m_lastError = "Cannot create output file";
-        return false;
+        throw std::runtime_error("No se puede crear el archivo desencriptado");
     }
 
     outFile.write(reinterpret_cast<const char*>(decrypted.data()), decrypted.size());
-    return outFile.good();
 }
-
-// ============================================================================
-// STRING HELPERS
-// ============================================================================
-
-std::string EncryptionLib::EncryptString(const std::string& plaintext) {
-    ByteVector data(plaintext.begin(), plaintext.end());
-    ByteVector encrypted = Encrypt(data);
-    return std::string(encrypted.begin(), encrypted.end());
-}
-
-std::string EncryptionLib::DecryptString(const std::string& encrypted) {
-    ByteVector data(encrypted.begin(), encrypted.end());
-    ByteVector decrypted = Decrypt(data);
-    return std::string(decrypted.begin(), decrypted.end());
-}
-
-// ============================================================================
-// STATIC METHODS - RC4
-// ============================================================================
-
-void EncryptionLib::RC4Encrypt(uint8_t* data, size_t length,
-                                const uint8_t* key, size_t keyLen) {
-    if (!data || length == 0 || !key || keyLen == 0) return;
-
-    RC4State state;
-    state.Init(key, keyLen);
-    state.Process(data, length);
-}
-
-void EncryptionLib::RC4Decrypt(uint8_t* data, size_t length,
-                                const uint8_t* key, size_t keyLen) {
-    // RC4 is symmetric
-    RC4Encrypt(data, length, key, keyLen);
-}
-
-// ============================================================================
-// STATIC METHODS - XOR
-// ============================================================================
-
-void EncryptionLib::XorEncrypt(uint8_t* data, size_t length,
-                                const uint8_t* key, size_t keyLen) {
-    if (!data || length == 0 || !key || keyLen == 0) return;
-
-    for (size_t i = 0; i < length; i++) {
-        data[i] ^= key[i % keyLen];
-    }
-}
-
-void EncryptionLib::XorDecrypt(uint8_t* data, size_t length,
-                                const uint8_t* key, size_t keyLen) {
-    // XOR is symmetric
-    XorEncrypt(data, length, key, keyLen);
-}
-
-// ============================================================================
-// STATIC METHODS - RANDOM
-// ============================================================================
-
-bool EncryptionLib::GenerateRandomBytes(uint8_t* buffer, size_t length) {
-    if (!buffer || length == 0) return false;
-
-    HCRYPTPROV hProv = 0;
-    if (!CryptAcquireContextW(&hProv, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) {
-        return false;
-    }
-
-    BOOL result = CryptGenRandom(hProv, static_cast<DWORD>(length), buffer);
-    CryptReleaseContext(hProv, 0);
-
-    return result != FALSE;
-}
-
-// ============================================================================
-// STATIC METHODS - HASHING
-// ============================================================================
-
-uint32_t EncryptionLib::HashCRC32(const uint8_t* data, size_t length) {
-    return CalculateCRC32(data, length);
-}
-
-ByteVector EncryptionLib::HashSHA256(const uint8_t* data, size_t length) {
-    ByteVector hash;
-
-    HCRYPTPROV hProv = 0;
-    HCRYPTHASH hHash = 0;
-
-    if (!CryptAcquireContextW(&hProv, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) {
-        return hash;
-    }
-
-    if (!CryptCreateHash(hProv, CALG_SHA_256, 0, 0, &hHash)) {
-        CryptReleaseContext(hProv, 0);
-        return hash;
-    }
-
-    if (CryptHashData(hHash, data, static_cast<DWORD>(length), 0)) {
-        DWORD hashSize = 32;
-        hash.resize(hashSize);
-        CryptGetHashParam(hHash, HP_HASHVAL, hash.data(), &hashSize, 0);
-    }
-
-    CryptDestroyHash(hHash);
-    CryptReleaseContext(hProv, 0);
-
-    return hash;
-}
-
-} // namespace AntiCheat

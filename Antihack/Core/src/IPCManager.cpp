@@ -163,7 +163,7 @@ bool IPCManager::ConnectToPipe() {
             return true;
         }
 
-        DWORD error = GetLastError();
+        DWORD error = ::GetLastError();
         if (error == ERROR_PIPE_BUSY) {
             // Wait for pipe to become available
             if (!WaitNamedPipeW(m_pipeName.c_str(), 1000)) {
@@ -319,7 +319,7 @@ bool IPCManager::SendRaw(const Message& msg) {
 
     DWORD bytesWritten;
     if (!WriteFile(m_hPipe, dataPtr, dataSize, &bytesWritten, nullptr)) {
-        m_lastError = "Write failed: " + std::to_string(GetLastError());
+        m_lastError = "Write failed: " + std::to_string(::GetLastError());
         return false;
     }
 
@@ -440,7 +440,7 @@ void IPCManager::ReadLoop() {
                 m_messageHandler(msg);
             }
         } else {
-            DWORD error = GetLastError();
+            DWORD error = ::GetLastError();
             if (error == ERROR_BROKEN_PIPE || error == ERROR_PIPE_NOT_CONNECTED) {
                 m_connected = false;
                 if (m_running) {
@@ -470,7 +470,7 @@ void IPCManager::WriteLoop() {
                 }
 
                 if (!SendRaw(msg)) {
-                    DWORD error = GetLastError();
+                    DWORD error = ::GetLastError();
                     if (error == ERROR_BROKEN_PIPE || error == ERROR_PIPE_NOT_CONNECTED) {
                         m_connected = false;
                         // Re-queue the message

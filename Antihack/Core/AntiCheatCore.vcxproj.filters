@@ -29,42 +29,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\core.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="src\detection.cpp">
-      <Filter>Source Files\Security</Filter>
-    </ClCompile>
-    <ClCompile Include="src\antidebug.cpp">
-      <Filter>Source Files\Security</Filter>
-    </ClCompile>
-    <ClCompile Include="src\integrity.cpp">
-      <Filter>Source Files\Security</Filter>
-    </ClCompile>
-    <ClCompile Include="src\ipc.cpp">
-      <Filter>Source Files\Communication</Filter>
-    </ClCompile>
-    <ClCompile Include="src\memory_scan.cpp">
-      <Filter>Source Files\Detection</Filter>
-    </ClCompile>
-    <ClCompile Include="src\file_protection.cpp">
-      <Filter>Source Files\Security</Filter>
-    </ClCompile>
-    <ClCompile Include="src\encryption.cpp">
-      <Filter>Source Files\Crypto</Filter>
-    </ClCompile>
-    <ClCompile Include="src\hooks.cpp">
-      <Filter>Source Files\Detection</Filter>
-    </ClCompile>
-    <ClCompile Include="src\antimacro.cpp">
-      <Filter>Source Files\Detection</Filter>
-    </ClCompile>
-    <ClCompile Include="src\FileProtection.cpp">
-      <Filter>Source Files\Security</Filter>
-    </ClCompile>
-    <ClCompile Include="src\EncryptionLib.cpp">
-      <Filter>Source Files\Crypto</Filter>
-    </ClCompile>
     <ClCompile Include="src\MacroDetector.cpp">
       <Filter>Source Files\Detection</Filter>
     </ClCompile>
@@ -86,6 +50,15 @@
     <ClCompile Include="src\ProcessMonitor.cpp">
       <Filter>Source Files\Detection</Filter>
     </ClCompile>
+    <ClCompile Include="src\SelfProtection.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\FileProtection.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\EncryptionLib.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\anticheat_core.h">
@@ -95,12 +68,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\internal\common.h">
-      <Filter>Header Files\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="include\internal\FileProtection.h">
-      <Filter>Header Files\Internal</Filter>
-    </ClInclude>
-    <ClInclude Include="include\internal\EncryptionLib.h">
       <Filter>Header Files\Internal</Filter>
     </ClInclude>
     <ClInclude Include="include\internal\MacroDetector.h">
@@ -123,6 +90,18 @@
     </ClInclude>
     <ClInclude Include="include\internal\ProcessMonitor.h">
       <Filter>Header Files\Internal</Filter>
+    </ClInclude>
+    <ClInclude Include="include\internal\IMonitorModule.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\internal\SelfProtection.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\internal\FileProtection.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\internal\EncryptionLib.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

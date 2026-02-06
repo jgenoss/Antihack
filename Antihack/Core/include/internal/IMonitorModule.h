@@ -226,7 +226,7 @@ public:
 
         if (!m_monitorThread) {
             m_state = ModuleState::Stopped;
-            m_lastError = "Failed to create monitor thread: " + std::to_string(GetLastError());
+            m_lastError = "Failed to create monitor thread: " + std::to_string(::GetLastError());
             return false;
         }
 

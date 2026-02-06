@@ -21,13 +21,13 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+    <PlatformToolset>v145</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -104,8 +104,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\FileProtection.cpp" />
     <ClCompile Include="src\EncryptionLib.cpp" />
+    <ClCompile Include="src\FileProtection.cpp" />
     <ClCompile Include="src\MacroDetector.cpp" />
     <ClCompile Include="src\HookDetector.cpp" />
     <ClCompile Include="src\CheatSignatures.cpp" />
@@ -113,17 +113,15 @@
     <ClCompile Include="src\AntiCheatEngine.cpp" />
     <ClCompile Include="src\MemoryPatcher.cpp" />
     <ClCompile Include="src\ProcessMonitor.cpp" />
-    <ClCompile Include="src\OverlayDetector.cpp" />
-    <ClCompile Include="src\HWIDCollector.cpp" />
     <ClCompile Include="src\SelfProtection.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\anticheat_core.h" />
+    <ClInclude Include="include\internal\EncryptionLib.h" />
+    <ClInclude Include="include\internal\FileProtection.h" />
     <ClInclude Include="include\stdafx.h" />
     <ClInclude Include="include\internal\common.h" />
     <ClInclude Include="include\internal\IMonitorModule.h" />
-    <ClInclude Include="include\internal\FileProtection.h" />
-    <ClInclude Include="include\internal\EncryptionLib.h" />
     <ClInclude Include="include\internal\MacroDetector.h" />
     <ClInclude Include="include\internal\HookDetector.h" />
     <ClInclude Include="include\internal\CheatSignatures.h" />
@@ -131,8 +129,6 @@
     <ClInclude Include="include\internal\AntiCheatEngine.h" />
     <ClInclude Include="include\internal\MemoryPatcher.h" />
     <ClInclude Include="include\internal\ProcessMonitor.h" />
-    <ClInclude Include="include\internal\OverlayDetector.h" />
-    <ClInclude Include="include\internal\HWIDCollector.h" />
     <ClInclude Include="include\internal\SelfProtection.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -141,7 +141,7 @@ bool SelfProtection::RegisterThread(DWORD threadId, bool critical) {
     // Open thread handle
     HANDLE hThread = OpenThread(THREAD_ALL_ACCESS, FALSE, threadId);
     if (!hThread) {
-        m_lastError = "Failed to open thread: " + std::to_string(GetLastError());
+        m_lastError = "Failed to open thread: " + std::to_string(::GetLastError());
         return false;
     }
 

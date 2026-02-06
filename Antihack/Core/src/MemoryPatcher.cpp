@@ -66,13 +66,13 @@ void MemoryPatcher::CommandLineToArg(char* Command, char*** argv) {
 DWORD MemoryPatcher::WriteMemory(const LPVOID lpAddress, const LPVOID lpBuf, const UINT uSize) {
     DWORD dwOldProtect;
     if (!VirtualProtect(lpAddress, uSize, PAGE_EXECUTE_READWRITE, &dwOldProtect))
-        return GetLastError();
+        return ::GetLastError();
 
     memcpy(lpAddress, lpBuf, uSize);
 
     DWORD dwBytes;
     if (!VirtualProtect(lpAddress, uSize, dwOldProtect, &dwBytes))
-        return GetLastError();
+        return ::GetLastError();
 
     return 0;
 }
@@ -80,13 +80,13 @@ DWORD MemoryPatcher::WriteMemory(const LPVOID lpAddress, const LPVOID lpBuf, con
 DWORD MemoryPatcher::ReadMemory(const LPVOID lpAddress, LPVOID lpBuf, const UINT uSize) {
     DWORD dwOldProtect;
     if (!VirtualProtect(lpAddress, uSize, PAGE_EXECUTE_READWRITE, &dwOldProtect))
-        return GetLastError();
+        return ::GetLastError();
 
     memcpy(lpBuf, lpAddress, uSize);
 
     DWORD dwBytes;
     if (!VirtualProtect(lpAddress, uSize, dwOldProtect, &dwBytes))
-        return GetLastError();
+        return ::GetLastError();
 
     return 0;
 }
